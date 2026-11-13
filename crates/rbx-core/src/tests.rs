@@ -50,3 +50,14 @@ fn xml_round_trip() {
 fn rejects_garbage() {
     assert!(Document::load(b"not a roblox file").is_err());
 }
+
+#[test]
+fn real_place_round_trip() {
+    let bytes = include_bytes!("../tests/fixtures/thing.rbxl");
+    let doc = Document::load(bytes).unwrap();
+    let count = doc.dom().descendants().count();
+
+    let saved = doc.save(Format::Binary).unwrap();
+    let reloaded = Document::load(&saved).unwrap();
+    assert_eq!(reloaded.dom().descendants().count(), count);
+}
