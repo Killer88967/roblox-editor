@@ -1,0 +1,9 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": ["$TURBO_ROOT$/crates/**", "$TURBO_ROOT$/Cargo.lock"],
+      "outputs": ["pkg/**"]
+    }
+  }
+}

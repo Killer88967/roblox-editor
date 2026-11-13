@@ -1,0 +1,15 @@
+{
+  "name": "@rbxe/wasm",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./pkg/rbx_wasm.d.ts",
+      "default": "./pkg/rbx_wasm.js"
+    }
+  },
+  "scripts": {
+    "build": "wasm-pack build ../../crates/rbx-wasm --target web --release --out-dir ../../packages/wasm/pkg --out-name rbx_wasm --no-pack"
+  }
+}
