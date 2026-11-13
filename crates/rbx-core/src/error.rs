@@ -1,3 +1,4 @@
+use rbx_dom_weak::types::Ref;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -12,6 +13,10 @@ pub enum CoreError {
     XmlDecode(#[from] rbx_xml::DecodeError),
     #[error("xml encode failed: {0}")]
     XmlEncode(#[from] rbx_xml::EncodeError),
+    #[error("instance not found: {0:?}")]
+    MissingInstance(Ref),
+    #[error("invalid op: {0}")]
+    InvalidOp(&'static str),
 }
 
 pub type Result<T> = std::result::Result<T, CoreError>;
