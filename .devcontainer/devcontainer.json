@@ -34,7 +34,7 @@
     "8080": { "label": "server" },
     "5432": { "label": "postgres", "onAutoForward": "silent" }
   },
-  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "postCreateCommand": "sudo chown -R $(whoami):$(whoami) /usr/local/cargo &&bash .devcontainer/post-create.sh",
   "hostRequirements": { "cpus": 4 },
   "customizations": {
     "vscode": {
@@ -47,14 +47,15 @@
         "Prisma.prisma",
         "JohnnyMorganz.luau-lsp",
         "RedCMD.json-embedded-languages",
-        "vscode-icons-team.vscode-icons",
         "yoavbls.pretty-ts-errors",
         "christian-kohler.path-intellisense",
-        "ultram4rine.vscode-choosealicense"
+        "ultram4rine.vscode-choosealicense",
+        "redhat.vscode-yaml",
+        "redhat.vscode-xml"
       ],
       "settings": {
         "workbench.colorTheme": "Dark Modern",
-        "workbench.iconTheme": "vscode-icons",
+        "workbench.iconTheme": "vscode-modern-icons",
         "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.formatOnSave": true,
         "editor.tabSize": 2,

@@ -1,0 +1,8 @@
+node_modules/
+target/
+.next/
+.turbo/
+pkg/
+dist/
+.env*
+!.env.example

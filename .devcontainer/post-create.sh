@@ -16,6 +16,7 @@ if [ -f pnpm-lock.yaml ]; then
 fi
 
 # Oh My Posh
+mkdir -p "$HOME/.local/bin"
 curl -s https://ohmyposh.dev/install.sh | bash -s -- -d "$HOME/.local/bin"
 mkdir -p "$HOME/.config/oh-my-posh"
 ln -sf "$PWD/.devcontainer/theme.omp.json" "$HOME/.config/oh-my-posh/theme.omp.json"
