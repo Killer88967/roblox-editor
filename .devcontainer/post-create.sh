@@ -10,9 +10,6 @@ curl -L --proto '=https' --tlsv1.2 -sSf \
   https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
 cargo binstall -y wasm-pack
 
-# pnpm
-npm install -g pnpm
-
 # Install JS deps once the monorepo exists
 if [ -f pnpm-lock.yaml ]; then
   pnpm install
