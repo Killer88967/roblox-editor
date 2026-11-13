@@ -10,8 +10,19 @@
       "installOhMyZsh": true,
       "installOhMyZshConfig": true
     },
-    "ghcr.io/devcontainers/features/node:1": { "version": "lts" },
-    "ghcr.io/devcontainers/features/github-cli:1": {}
+    "ghcr.io/devcontainers/features/git:1": {
+      "version": "latest",
+      "ppa": true
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/git-lfs:1": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "lts",
+      "pnpmVersion": "latest",
+      "nodeGypDependencies": true
+    }
   },
   "containerEnv": {
     "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/roblox_editor",
@@ -34,12 +45,74 @@
         "esbenp.prettier-vscode",
         "bradlc.vscode-tailwindcss",
         "Prisma.prisma",
-        "JohnnyMorganz.luau-lsp"
+        "JohnnyMorganz.luau-lsp",
+        "RedCMD.json-embedded-languages",
+        "vscode-icons-team.vscode-icons",
+        "yoavbls.pretty-ts-errors",
+        "christian-kohler.path-intellisense",
+        "ultram4rine.vscode-choosealicense"
       ],
       "settings": {
+        "workbench.colorTheme": "Dark Modern",
+        "workbench.iconTheme": "vscode-icons",
+        "editor.defaultFormatter": "esbenp.prettier-vscode",
         "editor.formatOnSave": true,
+        "editor.tabSize": 2,
+        "editor.wordWrap": "on",
+        "editor.cursorBlinking": "phase",
+        "editor.cursorSmoothCaretAnimation": "on",
+        "editor.smoothScrolling": true,
+        "editor.bracketPairColorization.enabled": true,
+        "editor.guides.bracketPairs": "active",
+        "editor.guides.bracketPairsHorizontal": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit",
+          "source.organizeImports": "explicit"
+        },
+        "explorer.compactFolders": false,
+        "explorer.confirmDelete": false,
+        "files.encoding": "utf8",
+        "files.eol": "\n",
+        "files.insertFinalNewline": true,
+        "files.trimFinalNewlines": true,
+        "files.trimTrailingWhitespace": true,
+        "files.associations": {
+          "*.json": "json",
+          "devcontainer.json": "jsonc",
+          "*.css": "tailwindcss",
+          "NOTICE": "markdown"
+        },
         "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.scrollback": 10000,
+        "git.autofetch": true,
+        "eslint.validate": [
+          "javascript",
+          "javascriptreact",
+          "typescript",
+          "typescriptreact",
+          "mdx"
+        ],
+        "js/ts.experimental.useTsgo": true,
+        "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+        "json.schemaDownload.enable": true,
+        "license.author": "Killer88967",
+        "license.default": "apache-2.0",
         "rust-analyzer.check.command": "clippy",
+        "chat.mcp.gallery.enabled": true,
+        "chat.mcp.access": "all",
+        "chat.mcp.discovery.enabled": {
+          "claude-desktop": false,
+          "copilot": false,
+          "windsurf": false,
+          "cursor-global": false,
+          "cursor-workspace": false
+        },
+        "github.copilot.enable": {
+          "*": false,
+          "plaintext": false,
+          "markdown": false,
+          "scminput": false
+        },
         "[rust]": { "editor.defaultFormatter": "rust-lang.rust-analyzer" }
       }
     }
