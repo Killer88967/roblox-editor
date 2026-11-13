@@ -32,6 +32,21 @@ pub enum Op {
     },
 }
 
+impl Op {
+    /// Every instance this op touches (used for change tracking).
+    pub fn refs(&self) -> Vec<Ref> {
+        match self {
+            Op::Create { parent, .. } => vec![*parent],
+            Op::Delete { target } | Op::SetName { target, .. } | Op::SetProperty { target, .. } => {
+                vec![*target]
+            }
+            Op::Restore { target, parent } | Op::Reparent { target, parent } => {
+                vec![*target, *parent]
+            }
+        }
+    }
+}
+
 /// Applies one op. Returns its inverse and, for Create, the new ref.
 pub fn apply(dom: &mut WeakDom, graveyard: &mut WeakDom, op: Op) -> Result<(Op, Option<Ref>)> {
     match op {

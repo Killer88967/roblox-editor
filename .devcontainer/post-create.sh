@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# C toolchain for wasm (zstd-sys)
+sudo apt-get update && sudo apt-get install -y --no-install-recommends clang llvm
+
 # Rust: WASM target + tooling
 rustup target add wasm32-unknown-unknown
 rustup component add clippy rustfmt

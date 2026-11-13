@@ -1,5 +1,6 @@
 use rbx_dom_weak::types::{Ref, Variant};
 use rbx_dom_weak::{InstanceBuilder, WeakDom, ustr};
+use std::collections::HashSet;
 
 use crate::document::Document;
 use crate::error::Result;
@@ -10,6 +11,7 @@ pub struct Editor {
     graveyard: WeakDom,
     undo_stack: Vec<Vec<Op>>,
     redo_stack: Vec<Vec<Op>>,
+    dirty: HashSet<Ref>,
 }
 
 impl Editor {
@@ -19,6 +21,7 @@ impl Editor {
             graveyard: WeakDom::new(InstanceBuilder::new("Folder")),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            dirty: HashSet::new(),
         }
     }
 
@@ -62,6 +65,11 @@ impl Editor {
         Ok(true)
     }
 
+    /// Refs changed since the last call. A ref that no longer exists in the dom was deleted.
+    pub fn take_dirty(&mut self) -> Vec<Ref> {
+        self.dirty.drain().collect()
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.undo_stack.is_empty()
     }
@@ -76,8 +84,10 @@ impl Editor {
         let mut created = Vec::new();
 
         for op in ops {
+            self.dirty.extend(op.refs());
             match ops::apply(self.doc.dom_mut(), &mut self.graveyard, op) {
                 Ok((inverse, new_ref)) => {
+                    self.dirty.extend(inverse.refs());
                     inverses.push(inverse);
                     created.extend(new_ref);
                 }
