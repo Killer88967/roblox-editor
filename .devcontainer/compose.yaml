@@ -1,0 +1,22 @@
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/rust:1-bookworm
+    volumes:
+      - ../..:/workspaces:cached
+      - cargo-registry:/usr/local/cargo/registry
+    command: sleep infinity
+    network_mode: service:db
+
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: roblox_editor
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  cargo-registry:
+  pgdata:
