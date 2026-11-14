@@ -1,9 +1,16 @@
 use rbx_dom_weak::types::{
-    BrickColor, CFrame, Color3, Color3uint8, Enum, Matrix3, Ref, Variant, Vector2, Vector3,
+    BrickColor, CFrame, Color3, Color3uint8, Enum, Matrix3, Ref, UDim, UDim2, Variant, Vector2,
+    Vector3,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::parse_ref;
+
+#[derive(Serialize, Deserialize)]
+pub struct UDimValue {
+    scale: f32,
+    offset: i32,
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", content = "value")]
@@ -25,7 +32,15 @@ pub enum Value {
     BrickColor(u16),
     Enum(u32),
     Ref(Option<String>),
-    Unsupported(String),
+    UDim(UDimValue),
+    UDim2 {
+        x: UDimValue,
+        y: UDimValue,
+    },
+    Unsupported {
+        ty: String,
+        text: String,
+    },
 }
 
 fn v3(v: &Vector3) -> [f32; 3] {
@@ -60,7 +75,32 @@ impl From<&Variant> for Value {
             Variant::BrickColor(bc) => Self::BrickColor(*bc as u16),
             Variant::Enum(e) => Self::Enum(e.to_u32()),
             Variant::Ref(r) => Self::Ref(r.is_some().then(|| r.to_string())),
-            other => Self::Unsupported(format!("{:?}", other.ty())),
+            Variant::UDim(u) => Self::UDim(UDimValue {
+                scale: u.scale,
+                offset: u.offset,
+            }),
+            Variant::UDim2(u) => Self::UDim2 {
+                x: UDimValue {
+                    scale: u.x.scale,
+                    offset: u.x.offset,
+                },
+                y: UDimValue {
+                    scale: u.y.scale,
+                    offset: u.y.offset,
+                },
+            },
+            other => {
+                let full = format!("{other:?}");
+                let text = if full.chars().count() > 120 {
+                    full.chars().take(117).collect::<String>() + "..."
+                } else {
+                    full
+                };
+                Self::Unsupported {
+                    ty: format!("{:?}", other.ty()),
+                    text,
+                }
+            }
         }
     }
 }
@@ -95,7 +135,14 @@ impl TryFrom<Value> for Variant {
                 Some(s) => parse_ref(&s)?,
                 None => Ref::none(),
             }),
-            Value::Unsupported(t) => return Err(format!("cannot set unsupported type {t}")),
+            Value::UDim(u) => Variant::UDim(UDim::new(u.scale, u.offset)),
+            Value::UDim2 { x, y } => Variant::UDim2(UDim2::new(
+                UDim::new(x.scale, x.offset),
+                UDim::new(y.scale, y.offset),
+            )),
+            Value::Unsupported { ty, .. } => {
+                return Err(format!("cannot set unsupported type {ty}"));
+            }
         })
     }
 }

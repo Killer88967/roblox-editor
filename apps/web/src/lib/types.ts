@@ -1,4 +1,5 @@
 type V3 = [number, number, number];
+type UDim = { scale: number; offset: number };
 
 export type Value =
   | { type: "Bool"; value: boolean }
@@ -10,7 +11,9 @@ export type Value =
   | { type: "CFrame"; value: { position: V3; orientation: [V3, V3, V3] } }
   | { type: "BrickColor" | "Enum"; value: number }
   | { type: "Ref"; value?: string }
-  | { type: "Unsupported"; value: string };
+  | { type: "UDim"; value: UDim }
+  | { type: "UDim2"; value: { x: UDim; y: UDim } }
+  | { type: "Unsupported"; value: { ty: string; text: string } };
 
 export type NodeInfo = {
   id: string;
@@ -54,9 +57,21 @@ export function formatValue(v: Value): string {
       return v.value.position.map(round).join(", ");
     case "Ref":
       return v.value ?? "nil";
+    case "UDim":
+      return `${round(v.value.scale)}, ${v.value.offset}`;
+    case "UDim2": {
+      const { x, y } = v.value;
+      return `{${round(x.scale)}, ${x.offset}}, {${round(y.scale)}, ${y.offset}`;
+    }
     case "Unsupported":
-      return `<${v.value}>`;
+      return v.value.text;
     default:
       return String(v.value);
   }
+}
+
+export function swatch(v: Value): string | null {
+  if (v.type === "Color3") return `rbg(${v.value.map((n) => Math.round(n * 255)).join(",")})`;
+  if (v.type === "Color3uint8") return `rbg(${v.value.join(",")})`;
+  return null;
 }
