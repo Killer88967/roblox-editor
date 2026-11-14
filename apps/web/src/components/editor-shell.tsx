@@ -3,6 +3,7 @@
 import { useEditor } from "@/stores/editor";
 import { Explorer } from "./explorer";
 import { Properties } from "./properties";
+import { Viewport } from "./viewport";
 
 const btn =
   "rounded bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:opacity-40 disabled:hover:bg-white/10";
@@ -13,13 +14,9 @@ export function EditorShell() {
   // Temporary: proves ops + undo/redo work end to end.
   const addPart = () => {
     const root = s.rootId ? s.nodes.get(s.rootId) : undefined;
-    const workspace = root?.children.find(
-      (id) => s.nodes.get(id)?.class === "Workspace",
-    );
+    const workspace = root?.children.find((id) => s.nodes.get(id)?.class === "Workspace");
     if (!workspace) return;
-    const [id] = s.apply([
-      { type: "create", parent: workspace, class: "Part", name: "Part" },
-    ]);
+    const [id] = s.apply([{ type: "create", parent: workspace, class: "Part", name: "Part" }]);
     if (id) s.select(id);
   };
 
@@ -41,41 +38,19 @@ export function EditorShell() {
         <button type="button" className={btn} onClick={s.newPlace}>
           New
         </button>
-        <button
-          type="button"
-          className={btn}
-          onClick={s.save}
-          disabled={!s.editor}
-        >
+        <button type="button" className={btn} onClick={s.save} disabled={!s.editor}>
           Save
         </button>
-        <button
-          type="button"
-          className={btn}
-          onClick={s.undo}
-          disabled={!s.canUndo}
-        >
+        <button type="button" className={btn} onClick={s.undo} disabled={!s.canUndo}>
           Undo
         </button>
-        <button
-          type="button"
-          className={btn}
-          onClick={s.redo}
-          disabled={!s.canRedo}
-        >
+        <button type="button" className={btn} onClick={s.redo} disabled={!s.canRedo}>
           Redo
         </button>
-        <button
-          type="button"
-          className={btn}
-          onClick={addPart}
-          disabled={!s.editor}
-        >
+        <button type="button" className={btn} onClick={addPart} disabled={!s.editor}>
           Add Part
         </button>
-        <span className="ml-auto truncate text-sm text-zinc-400">
-          {s.fileName}
-        </span>
+        <span className="ml-auto truncate text-sm text-zinc-400">{s.fileName}</span>
       </header>
 
       {s.error && (
@@ -92,8 +67,8 @@ export function EditorShell() {
         <aside className="w-72 shrink-0 overflow-auto border-r border-white/10">
           <Explorer />
         </aside>
-        <section className="flex flex-1 items-center justify-center text-sm text-zinc-600">
-          Viewport (Phase 1)
+        <section className="relative min-w-0 flex-1">
+          <Viewport />
         </section>
         <aside className="w-72 shrink-0 overflow-auto border-l border-white/10">
           <Properties />

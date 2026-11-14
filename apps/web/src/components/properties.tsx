@@ -7,21 +7,15 @@ import { formatValue, type PropertyInfo } from "@/lib/types";
 export function Properties() {
   const editor = useEditor((s) => s.editor);
   const selectedId = useEditor((s) => s.selectedId);
-  const node = useEditor((s) =>
-    s.selectedId ? s.nodes.get(s.selectedId) : undefined,
-  );
+  const node = useEditor((s) => (s.selectedId ? s.nodes.get(s.selectedId) : undefined));
 
   // `node` changes identity whenever that instance is dirtied, so this re-reads after edits.
   const props = useMemo(
-    () =>
-      editor && selectedId && node
-        ? (editor.properties(selectedId) as PropertyInfo[])
-        : [],
+    () => (editor && selectedId && node ? (editor.properties(selectedId) as PropertyInfo[]) : []),
     [editor, selectedId, node],
   );
 
-  if (!node)
-    return <p className="p-3 text-sm text-zinc-500">Nothing selected</p>;
+  if (!node) return <p className="p-3 text-sm text-zinc-500">Nothing selected</p>;
 
   return (
     <div className="text-sm">
@@ -31,10 +25,7 @@ export function Properties() {
       </div>
       <dl>
         {props.map((p) => (
-          <div
-            key={p.key}
-            className="flex gap-2 border-b border-white/5 px-3 py-1"
-          >
+          <div key={p.key} className="flex gap-2 border-b border-white/5 px-3 py-1">
             <dt className="w-1/2 shrink-0 truncate text-zinc-400">{p.key}</dt>
             <dd className="truncate">{formatValue(p.value)}</dd>
           </div>

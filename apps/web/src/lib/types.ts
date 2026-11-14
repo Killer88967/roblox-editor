@@ -29,6 +29,16 @@ export type JsOp =
   | { type: "setProperty"; target: string; key: string; value?: Value }
   | { type: "reparent"; target: string; parent: string };
 
+export type RenderPart = {
+  id: string;
+  shape: "block" | "ball" | "cylinder" | "wedge" | "cornerWedge" | "placeholder";
+  size: V3;
+  matrix: number[];
+  color: V3;
+  transparency: number;
+  material: number;
+};
+
 const round = (n: number) => +n.toFixed(3);
 
 export function formatValue(v: Value): string {

@@ -32,9 +32,7 @@ function TreeNode({ id, depth }: { id: string; depth: number }) {
           {hasChildren ? (open ? "▾" : "▸") : ""}
         </button>
         <span className="truncate">{node.name}</span>
-        <span className="ml-auto shrink-0 pl-2 text-xs text-zinc-500">
-          {node.class}
-        </span>
+        <span className="ml-auto shrink-0 pl-2 text-xs text-zinc-500">{node.class}</span>
       </div>
       {open && hasChildren && (
         <ul>

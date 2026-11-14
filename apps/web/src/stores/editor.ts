@@ -1,12 +1,13 @@
 import { create } from "zustand";
 import { loadWasm, WasmEditor } from "@/lib/wasm";
-import type { JsOp, NodeInfo } from "@/lib/types";
+import type { JsOp, NodeInfo, RenderPart } from "@/lib/types";
 
 type EditorState = {
   editor: WasmEditor | null;
   fileName: string;
   rootId: string | null;
   nodes: Map<string, NodeInfo>;
+  parts: RenderPart[];
   selectedId: string | null;
   canUndo: boolean;
   canRedo: boolean;
@@ -32,6 +33,7 @@ function fresh(editor: WasmEditor, fileName: string) {
     fileName,
     rootId: editor.rootId(),
     nodes,
+    parts: editor.renderParts() as RenderPart[],
     selectedId: null,
     canUndo: false,
     canRedo: false,
@@ -52,6 +54,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     }
     set({
       nodes: next,
+      parts: editor.renderParts() as RenderPart[],
       canUndo: editor.canUndo(),
       canRedo: editor.canRedo(),
       selectedId: selectedId && next.has(selectedId) ? selectedId : null,
@@ -76,6 +79,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     fileName: "",
     rootId: null,
     nodes: new Map(),
+    parts: [],
     selectedId: null,
     canUndo: false,
     canRedo: false,

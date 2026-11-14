@@ -1,4 +1,5 @@
 mod js_ops;
+mod render;
 mod value;
 
 use rbx_core::{Document, Editor, Format, Op};
@@ -65,7 +66,8 @@ impl WasmEditor {
         ];
         let dom = WeakDom::new(
             InstanceBuilder::new("DataModel")
-                .with_children(services.map(|class| InstanceBuilder::new(class))),
+                // .with_children(services.map(|class| InstanceBuilder::new(class))),
+                .with_children(services.map(InstanceBuilder::new)),
         );
         Self {
             inner: Editor::new(Document::from_dom(dom)),
@@ -162,6 +164,12 @@ impl WasmEditor {
             .iter()
             .map(|r| r.to_string())
             .collect()
+    }
+
+    /// Everything under Workspace that should be drawn.
+    #[wasm_bindgen(js_name = renderParts)]
+    pub fn render_parts(&self) -> Result<JsValue, JsError> {
+        serde_wasm_bindgen::to_value(&render::render_parts(self.inner.dom())).map_err(js_err)
     }
 }
 
