@@ -13,6 +13,8 @@ getrandom = { version = "0.2", features = ["js"] }
 getrandom03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
 rbx-core = { version = "0.1.0", path = "../rbx-core" }
 rbx_dom_weak = "4.2.0"
+rbx_reflection = "7.0.0"
+rbx_reflection_database = "3.0.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 wasm-bindgen = "0.2.130"

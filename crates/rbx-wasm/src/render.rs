@@ -2,21 +2,7 @@ use rbx_dom_weak::types::Variant;
 use rbx_dom_weak::{Instance, WeakDom, ustr};
 use serde::Serialize;
 
-const PART_CLASSES: &[&str] = &[
-    "Part",
-    "SpawnLocation",
-    "Seat",
-    "VehicleSeat",
-    "SkateboardPlatform",
-    "WedgePart",
-    "CornerWedgePart",
-    "TrussPart",
-    "MeshPart",
-    "UnionOperation",
-    "NegateOperation",
-    "IntersectOperation",
-    "PartOperation",
-];
+use crate::reflection::is_a;
 
 #[derive(Serialize)]
 pub struct RenderPart {
@@ -37,8 +23,8 @@ fn shape(inst: &Instance) -> &'static str {
     match inst.class.as_str() {
         "WedgePart" => return "wedge",
         "CornerWedgePart" => return "cornerWedge",
-        "MeshPart" | "UnionOperation" | "NegateOperation" | "IntersectOperation"
-        | "PartOperation" => return "placeholder",
+        // MeshParts and unions need asset/CSG data we don't have yet
+        class if is_a(class, "TriangleMeshPart") => return "placeholder",
         _ => {}
     }
     match prop(inst, &["Shape", "shape"]) {
@@ -94,7 +80,11 @@ fn in_workspace(dom: &WeakDom, inst: &Instance) -> bool {
 
 pub fn render_parts(dom: &WeakDom) -> Vec<RenderPart> {
     dom.descendants()
-        .filter(|inst| PART_CLASSES.contains(&inst.class.as_str()) && in_workspace(dom, inst))
+        .filter(|inst| {
+            inst.class != "Terrain"
+                && is_a(inst.class.as_str(), "BasePart")
+                && in_workspace(dom, inst)
+        })
         .map(|inst| RenderPart {
             id: inst.referent().to_string(),
             shape: shape(inst),
@@ -116,4 +106,17 @@ pub fn render_parts(dom: &WeakDom) -> Vec<RenderPart> {
         .collect()
 }
 
+#[cfg(test)]
+mod tests {
+    use rbx_core::Document;
 
+    #[test]
+    fn renders_fixture_parts() {
+        let bytes = include_bytes!("../../rbx-core/tests/fixtures/thing.rbxl");
+        let doc = Document::load(bytes).unwrap();
+        let parts = super::render_parts(doc.dom());
+        // Baseplate, location1-6, Part, SpawnLocation (Terrain and parts outside Workspace excluded)
+        assert_eq!(parts.len(), 9);
+        assert!(parts.iter().all(|p| p.shape == "block"));
+    }
+}

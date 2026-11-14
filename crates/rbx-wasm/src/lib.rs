@@ -1,9 +1,10 @@
 mod js_ops;
+mod reflection;
 mod render;
 mod value;
 
 use rbx_core::{Document, Editor, Format, Op};
-use rbx_dom_weak::types::Ref;
+use rbx_dom_weak::types::{Ref, Variant};
 use rbx_dom_weak::{InstanceBuilder, WeakDom};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -34,9 +35,14 @@ struct NodeInfo {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct PropertyInfo {
     key: String,
     value: Value,
+    /// Enum item name, e.g. "Plastic" for Material 256.
+    enum_item: Option<&'static str>,
+    /// Studio hides this (deprecated, internal, or not scriptable).
+    hidden: bool,
 }
 
 #[wasm_bindgen]
@@ -113,12 +119,18 @@ impl WasmEditor {
             .get_by_ref(r)
             .ok_or_else(|| js_err(format!("instance not found: {id}")))?;
 
+        let class = inst.class.as_str();
         let mut props: Vec<PropertyInfo> = inst
             .properties
             .iter()
             .map(|(k, v)| PropertyInfo {
                 key: k.to_string(),
                 value: v.into(),
+                enum_item: match v {
+                    Variant::Enum(e) => reflection::enum_item(class, k.as_str(), e.to_u32()),
+                    _ => None,
+                },
+                hidden: reflection::is_hidden(class, k.as_str()),
             })
             .collect();
         props.sort_by(|a, b| a.key.cmp(&b.key));

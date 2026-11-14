@@ -9,6 +9,10 @@ type EditorState = {
   nodes: Map<string, NodeInfo>;
   parts: RenderPart[];
   selectedId: string | null;
+  /** Explorer rows whose children are shown. */
+  expanded: Set<string>;
+  /** Bumped to ask the viewport to frame the selection. */
+  focusRequest: number;
   canUndo: boolean;
   canRedo: boolean;
   error: string | null;
@@ -16,6 +20,8 @@ type EditorState = {
   newPlace: () => Promise<void>;
   save: () => void;
   select: (id: string | null) => void;
+  toggleExpanded: (id: string) => void;
+  focusSelected: () => void;
   apply: (ops: JsOp[]) => string[];
   undo: () => void;
   redo: () => void;
@@ -28,13 +34,16 @@ function fresh(editor: WasmEditor, fileName: string) {
   editor.takeDirty();
   const nodes = new Map<string, NodeInfo>();
   for (const n of editor.nodes() as NodeInfo[]) nodes.set(n.id, n);
+  const rootId = editor.rootId();
+  const workspace = nodes.get(rootId)?.children.find((id) => nodes.get(id)?.class === "Workspace");
   return {
     editor,
     fileName,
-    rootId: editor.rootId(),
+    rootId,
     nodes,
     parts: editor.renderParts() as RenderPart[],
     selectedId: null,
+    expanded: new Set(workspace ? [rootId, workspace] : [rootId]),
     canUndo: false,
     canRedo: false,
     error: null,
@@ -81,6 +90,8 @@ export const useEditor = create<EditorState>()((set, get) => {
     nodes: new Map(),
     parts: [],
     selectedId: null,
+    expanded: new Set(),
+    focusRequest: 0,
     canUndo: false,
     canRedo: false,
     error: null,
@@ -119,7 +130,22 @@ export const useEditor = create<EditorState>()((set, get) => {
       }
     },
 
-    select: (id) => set({ selectedId: id }),
+    select(id) {
+      if (!id) return set({ selectedId: null });
+      // Expand every ancestor so the row is visible in the Explorer.
+      const { nodes, expanded } = get();
+      const next = new Set(expanded);
+      for (let p = nodes.get(id)?.parent; p; p = nodes.get(p)?.parent) next.add(p);
+      set({ selectedId: id, expanded: next.size === expanded.size ? expanded : next });
+    },
+
+    toggleExpanded(id) {
+      const next = new Set(get().expanded);
+      if (!next.delete(id)) next.add(id);
+      set({ expanded: next });
+    },
+
+    focusSelected: () => set((s) => ({ focusRequest: s.focusRequest + 1 })),
     apply: (ops) => run((ed) => ed.apply(ops), []),
     undo: () => run((ed) => ed.undo(), false),
     redo: () => run((ed) => ed.redo(), false),

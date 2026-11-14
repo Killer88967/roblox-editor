@@ -431,6 +431,8 @@ dependencies = [
  "getrandom 0.3.4",
  "rbx-core",
  "rbx_dom_weak",
+ "rbx_reflection",
+ "rbx_reflection_database",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",

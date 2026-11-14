@@ -23,7 +23,14 @@ export type NodeInfo = {
   children: string[];
 };
 
-export type PropertyInfo = { key: string; value: Value };
+export type PropertyInfo = {
+  key: string;
+  value: Value;
+  /** Enum item name, e.g. "Plastic" for Material 256. */
+  enumItem?: string;
+  /** Studio hides this (deprecated, internal, or not scriptable). */
+  hidden: boolean;
+};
 
 export type JsOp =
   | { type: "create"; parent: string; class: string; name: string }
@@ -61,7 +68,7 @@ export function formatValue(v: Value): string {
       return `${round(v.value.scale)}, ${v.value.offset}`;
     case "UDim2": {
       const { x, y } = v.value;
-      return `{${round(x.scale)}, ${x.offset}}, {${round(y.scale)}, ${y.offset}`;
+      return `{${round(x.scale)}, ${x.offset}}, {${round(y.scale)}, ${y.offset}}`;
     }
     case "Unsupported":
       return v.value.text;
@@ -71,7 +78,7 @@ export function formatValue(v: Value): string {
 }
 
 export function swatch(v: Value): string | null {
-  if (v.type === "Color3") return `rbg(${v.value.map((n) => Math.round(n * 255)).join(",")})`;
-  if (v.type === "Color3uint8") return `rbg(${v.value.join(",")})`;
+  if (v.type === "Color3") return `rgb(${v.value.map((n) => Math.round(n * 255)).join(",")})`;
+  if (v.type === "Color3uint8") return `rgb(${v.value.join(",")})`;
   return null;
 }
