@@ -2,12 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useEditor } from "@/stores/editor";
-import {
-  formatValue,
-  swatch,
-  type PropertyInfo,
-  type Value,
-} from "@/lib/types";
+import { formatValue, swatch, type PropertyInfo, type Value } from "@/lib/types";
 import { fromHex, parseValue, TEXT_EDITABLE, toHex } from "@/lib/edit";
 
 const input =
@@ -58,8 +53,7 @@ function EnumSelect({ id, prop }: { id: string; prop: PropertyInfo }) {
     [editor, id, prop.key],
   );
 
-  if (items.length === 0)
-    return <span className="truncate">{formatValue(prop.value)}</span>;
+  if (items.length === 0) return <span className="truncate">{formatValue(prop.value)}</span>;
 
   return (
     <select
@@ -85,18 +79,11 @@ function EnumSelect({ id, prop }: { id: string; prop: PropertyInfo }) {
   );
 }
 
-export function PropertyEditor({
-  id,
-  prop,
-}: {
-  id: string;
-  prop: PropertyInfo;
-}) {
+export function PropertyEditor({ id, prop }: { id: string; prop: PropertyInfo }) {
   const apply = useEditor((s) => s.apply);
   const v = prop.value;
 
-  const set = (value: Value) =>
-    apply([{ type: "setProperty", target: id, key: prop.key, value }]);
+  const set = (value: Value) => apply([{ type: "setProperty", target: id, key: prop.key, value }]);
 
   if (v.type === "Bool") {
     return (
@@ -111,11 +98,7 @@ export function PropertyEditor({
   if (v.type === "Enum") return <EnumSelect id={id} prop={prop} />;
 
   if (!TEXT_EDITABLE.has(v.type)) {
-    return (
-      <span className="truncate text-zinc-400">
-        {prop.enumItem ?? formatValue(v)}
-      </span>
-    );
+    return <span className="truncate text-zinc-400">{prop.enumItem ?? formatValue(v)}</span>;
   }
 
   const text = formatValue(v);

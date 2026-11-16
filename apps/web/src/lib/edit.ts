@@ -3,11 +3,9 @@ import type { Value } from "./types";
 type Vec3 = [number, number, number];
 
 /** Every number in a string, e.g. "{0.5, 10}, {0, -4}" -> [0.5, 10, 0, -4]. */
-const nums = (s: string) =>
-  s.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)?.map(Number) ?? [];
+const nums = (s: string) => s.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi)?.map(Number) ?? [];
 
-const clamp = (n: number, lo: number, hi: number) =>
-  Math.min(hi, Math.max(lo, n));
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
 /** Value types the panel can edit with a text field. */
 export const TEXT_EDITABLE = new Set<Value["type"]>([
@@ -36,34 +34,26 @@ export function parseValue(prev: Value, text: string): Value | null {
       return { type: "String", value: text };
     case "Int32":
     case "Int64":
-      return n.length === 1
-        ? { type: prev.type, value: Math.trunc(n[0]) }
-        : null;
+      return n.length === 1 ? { type: prev.type, value: Math.trunc(n[0]) } : null;
     case "Float32":
     case "Float64":
       return n.length === 1 ? { type: prev.type, value: n[0] } : null;
     case "Vector2":
       return n.length === 2 ? { type: "Vector2", value: [n[0], n[1]] } : null;
     case "Vector3":
-      return n.length === 3
-        ? { type: "Vector3", value: [n[0], n[1], n[2]] }
-        : null;
+      return n.length === 3 ? { type: "Vector3", value: [n[0], n[1], n[2]] } : null;
     case "Color3": // typed as 0-255 like Studio, stored as 0-1
       return n.length === 3
         ? {
             type: "Color3",
-            value: [n[0], n[1], n[2]].map(
-              (c) => clamp(c, 0, 255) / 255,
-            ) as Vec3,
+            value: [n[0], n[1], n[2]].map((c) => clamp(c, 0, 255) / 255) as Vec3,
           }
         : null;
     case "Color3uint8":
       return n.length === 3
         ? {
             type: "Color3uint8",
-            value: [n[0], n[1], n[2]].map((c) =>
-              Math.round(clamp(c, 0, 255)),
-            ) as Vec3,
+            value: [n[0], n[1], n[2]].map((c) => Math.round(clamp(c, 0, 255))) as Vec3,
           }
         : null;
     case "CFrame": // edits position only, keeps rotation
@@ -99,8 +89,7 @@ const hex2 = (n: number) =>
 
 /** Color value -> "#rrggbb" for <input type="color">. */
 export function toHex(v: Value): string | null {
-  if (v.type === "Color3")
-    return "#" + v.value.map((c) => hex2(c * 255)).join("");
+  if (v.type === "Color3") return "#" + v.value.map((c) => hex2(c * 255)).join("");
   if (v.type === "Color3uint8") return "#" + v.value.map(hex2).join("");
   return null;
 }
@@ -108,8 +97,7 @@ export function toHex(v: Value): string | null {
 /** "#rrggbb" -> a value of the same color type as `prev`. */
 export function fromHex(prev: Value, hex: string): Value | null {
   const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as Vec3;
-  if (prev.type === "Color3")
-    return { type: "Color3", value: rgb.map((c) => c / 255) as Vec3 };
+  if (prev.type === "Color3") return { type: "Color3", value: rgb.map((c) => c / 255) as Vec3 };
   if (prev.type === "Color3uint8") return { type: "Color3uint8", value: rgb };
   return null;
 }

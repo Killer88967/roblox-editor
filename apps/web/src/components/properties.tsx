@@ -8,25 +8,19 @@ import { PropertyEditor, TextField } from "./property-editor";
 export function Properties() {
   const editor = useEditor((s) => s.editor);
   const selectedId = useEditor((s) => s.selectedId);
-  const node = useEditor((s) =>
-    s.selectedId ? s.nodes.get(s.selectedId) : undefined,
-  );
+  const node = useEditor((s) => (s.selectedId ? s.nodes.get(s.selectedId) : undefined));
   const apply = useEditor((s) => s.apply);
   const [showHidden, setShowHidden] = useState(false);
 
   // `node` changes identity whenever that instance is dirtied, so this re-reads after edits.
   const all = useMemo(
-    () =>
-      editor && selectedId && node
-        ? (editor.properties(selectedId) as PropertyInfo[])
-        : [],
+    () => (editor && selectedId && node ? (editor.properties(selectedId) as PropertyInfo[]) : []),
     [editor, selectedId, node],
   );
   const props = showHidden ? all : all.filter((p) => !p.hidden);
   const hiddenCount = all.length - all.filter((p) => !p.hidden).length;
 
-  if (!node)
-    return <p className="p-3 text-sm text-zinc-500">Nothing selected</p>;
+  if (!node) return <p className="p-3 text-sm text-zinc-500">Nothing selected</p>;
 
   return (
     <div className="text-sm">
@@ -41,9 +35,7 @@ export function Properties() {
               return true;
             }}
           />
-          <div className="mt-0.5 px-1.5 text-xs text-zinc-500">
-            {node.class}
-          </div>
+          <div className="mt-0.5 px-1.5 text-xs text-zinc-500">{node.class}</div>
         </div>
         {hiddenCount > 0 && (
           <label className="ml-auto flex shrink-0 items-center gap-1 text-xs text-zinc-400">

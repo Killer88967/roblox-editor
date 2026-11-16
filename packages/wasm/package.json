@@ -10,6 +10,6 @@
     }
   },
   "scripts": {
-    "build": "wasm-pack build ../../crates/rbx-wasm --target web --release --out-dir ../../packages/wasm/pkg --out-name rbx_wasm --no-pack"
+    "build": "wasm-pack build ../../crates/rbx-wasm --target web --release --out-dir ../../packages/wasm/pkg --out-name rbx_wasm --no-pack && pnpm --filter wasm exec rm pkg/.gitignore"
   }
 }

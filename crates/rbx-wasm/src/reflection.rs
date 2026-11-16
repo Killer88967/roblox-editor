@@ -1,8 +1,8 @@
 //! Thin helpers over the Roblox reflection database (already bundled by rbx_binary).
-use serde::Serialize;
 use rbx_reflection::{
     DataType, EnumDescriptor, PropertyDescriptor, PropertyTag, ReflectionDatabase, Scriptability,
 };
+use serde::Serialize;
 
 fn db() -> &'static ReflectionDatabase<'static> {
     rbx_reflection_database::get_bundled()
@@ -43,25 +43,24 @@ pub struct EnumItem {
     value: u32,
 }
 
-
 /// Every item of an enum property, sorted by value (for dropdowns).
 pub fn enum_items(class: &str, prop: &str) -> Vec<EnumItem> {
     let Some(desc) = enum_descriptor(class, prop) else {
         return Vec::new();
     };
     let mut items: Vec<EnumItem> = desc
-        .items,
+        .items
         .iter()
         .map(|(name, value)| EnumItem {
             name,
-            value: *value
+            value: *value,
         })
-        .collect()
+        .collect();
     items.sort_by_key(|i| i.value);
     items
 }
 
-fn enum_descriptor(class&str,prop:&str) -> Option<&'static EnumDescriptor<'static>> {
+fn enum_descriptor(class: &str, prop: &str) -> Option<&'static EnumDescriptor<'static>> {
     let DataType::Enum(enum_name) = find_property(class, prop)?.data_type else {
         return None;
     };
@@ -93,6 +92,10 @@ mod tests {
         assert!(is_hidden("Part", "Velocity"));
         assert!(!is_hidden("Part", "Size"));
         assert!(!is_hidden("Script", "Source"));
-        assert!(enum_items("Part", "Material").iter().any(|i| i.name == "Neon"));
+        assert!(
+            enum_items("Part", "Material")
+                .iter()
+                .any(|i| i.name == "Neon")
+        );
     }
 }
