@@ -138,6 +138,19 @@ impl WasmEditor {
         serde_wasm_bindgen::to_value(&props).map_err(js_err)
     }
 
+    /// Items for an enum property's dropdown: [{ name, value }].
+    #[wasm_bindgen(js_name = enumItems)]
+    pub fn enum_items(&self, id: &str, key: &str) -> Result<JsValue, JsError> {
+        let r = parse_ref(id).map_err(js_err)?;
+        let inst = self
+            .inner
+            .dom()
+            .get_by_ref(r)
+            .ok_or_else(|| js_err(format!("instance not found: {id}")))?;
+        serde_wasm_bindgen::to_value(&reflection::enum_items(inst.class.as_str(), key))
+            .map_err(js_err)
+    }
+
     /// Applies an array of ops as one undo step. Returns ids of created instances.
     pub fn apply(&mut self, ops: JsValue) -> Result<Vec<String>, JsError> {
         let js_ops: Vec<JsOp> = serde_wasm_bindgen::from_value(ops).map_err(js_err)?;

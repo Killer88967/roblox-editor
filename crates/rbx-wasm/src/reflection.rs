@@ -1,7 +1,7 @@
 //! Thin helpers over the Roblox reflection database (already bundled by rbx_binary).
-
+use serde::Serialize;
 use rbx_reflection::{
-    DataType, PropertyDescriptor, PropertyTag, ReflectionDatabase, Scriptability,
+    DataType, EnumDescriptor, PropertyDescriptor, PropertyTag, ReflectionDatabase, Scriptability,
 };
 
 fn db() -> &'static ReflectionDatabase<'static> {
@@ -37,6 +37,37 @@ pub fn enum_item(class: &str, prop: &str, value: u32) -> Option<&'static str> {
         .map(|(name, _)| *name)
 }
 
+#[derive(Serialize)]
+pub struct EnumItem {
+    name: &'static str,
+    value: u32,
+}
+
+
+/// Every item of an enum property, sorted by value (for dropdowns).
+pub fn enum_items(class: &str, prop: &str) -> Vec<EnumItem> {
+    let Some(desc) = enum_descriptor(class, prop) else {
+        return Vec::new();
+    };
+    let mut items: Vec<EnumItem> = desc
+        .items,
+        .iter()
+        .map(|(name, value)| EnumItem {
+            name,
+            value: *value
+        })
+        .collect()
+    items.sort_by_key(|i| i.value);
+    items
+}
+
+fn enum_descriptor(class&str,prop:&str) -> Option<&'static EnumDescriptor<'static>> {
+    let DataType::Enum(enum_name) = find_property(class, prop)?.data_type else {
+        return None;
+    };
+    db().enums.get(enum_name)
+}
+
 /// Properties Studio doesn't show: hidden, deprecated, or not scriptable at all.
 /// Unknown properties are shown.
 pub fn is_hidden(class: &str, prop: &str) -> bool {
@@ -62,5 +93,6 @@ mod tests {
         assert!(is_hidden("Part", "Velocity"));
         assert!(!is_hidden("Part", "Size"));
         assert!(!is_hidden("Script", "Source"));
+        assert!(enum_items("Part", "Material").iter().any(|i| i.name == "Neon"));
     }
 }
