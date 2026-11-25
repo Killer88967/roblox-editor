@@ -4,6 +4,7 @@ import Editor, { type OnMount } from "@monaco-editor/react";
 import { useEffect, useMemo, useRef } from "react";
 import { useEditor } from "@/stores/editor";
 import { registerLuau } from "@/lib/luau";
+import { registerCompletions } from "@/lib/luau-complete";
 import type { PropertyInfo } from "@/lib/types";
 
 /** Typing pauses this long before the source is committed (one undo step per pause). */
@@ -85,7 +86,10 @@ export function ScriptEditor({ id }: { id: string }) {
       defaultLanguage="luau"
       defaultValue={initial}
       theme="vs-dark"
-      beforeMount={registerLuau}
+      beforeMount={(monaco) => {
+        registerLuau(monaco);
+        registerCompletions(monaco);
+      }}
       onMount={onMount}
       onChange={() => {
         clearTimeout(timer.current);

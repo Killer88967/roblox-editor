@@ -45,6 +45,7 @@
         "dbaeumer.vscode-eslint",
         "esbenp.prettier-vscode",
         "bradlc.vscode-tailwindcss",
+        "usernamehw.errorlens",
         "Prisma.prisma",
         "JohnnyMorganz.luau-lsp",
         "RedCMD.json-embedded-languages",
