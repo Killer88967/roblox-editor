@@ -9,7 +9,8 @@
     "format": "prettier --write ."
   },
   "devDependencies": {
-    "turbo": "^2.11.13"
+    "turbo": "^2.11.13",
+    "yaml": "^2.9.1"
   },
   "packageManager": "pnpm@12.23.0"
 }

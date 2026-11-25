@@ -1,1 +1,2 @@
 packages/wasm/**
+apps/web/src/data/*.json

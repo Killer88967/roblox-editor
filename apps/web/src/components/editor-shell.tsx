@@ -187,7 +187,8 @@ export function EditorShell() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target?.closest("input, textarea, select, [contenteditable]")) return;
+      // Typing in a field or the script editor (Monaco may not use a textarea) is not a shortcut.
+      if (target?.closest("input, textarea, select, [contenteditable], .monaco-editor")) return;
       const st = useEditor.getState();
       const mod = e.metaKey || e.ctrlKey;
       const key = e.key.toLowerCase();
