@@ -1,6 +1,6 @@
 use rbx_dom_weak::types::{
-    BrickColor, CFrame, Color3, Color3uint8, Enum, Matrix3, Ref, UDim, UDim2, Variant, Vector2,
-    Vector3,
+    BrickColor, CFrame, Color3, Color3uint8, Content, ContentId, Enum, Matrix3, Ref, UDim, UDim2,
+    Variant, Vector2, Vector3,
 };
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,10 @@ pub enum Value {
         x: UDimValue,
         y: UDimValue,
     },
+    /// An asset URI like "rbxassetid://123", or "" for none.
+    Content(String),
+    /// Older string-based asset id properties.
+    ContentId(String),
     Unsupported {
         ty: String,
         text: String,
@@ -89,6 +93,10 @@ impl From<&Variant> for Value {
                     offset: u.y.offset,
                 },
             },
+            Variant::Content(c) if c.as_object().is_none() => {
+                Self::Content(c.as_uri().unwrap_or_default().to_owned())
+            }
+            Variant::ContentId(c) => Self::ContentId(c.as_str().to_owned()),
             other => {
                 let full = format!("{other:?}");
                 let text = if full.chars().count() > 120 {
@@ -140,6 +148,9 @@ impl TryFrom<Value> for Variant {
                 UDim::new(x.scale, x.offset),
                 UDim::new(y.scale, y.offset),
             )),
+            Value::Content(uri) if uri.is_empty() => Variant::Content(Content::none()),
+            Value::Content(uri) => Variant::Content(Content::from(uri)),
+            Value::ContentId(id) => Variant::ContentId(ContentId::from(id)),
             Value::Unsupported { ty, .. } => {
                 return Err(format!("cannot set unsupported type {ty}"));
             }

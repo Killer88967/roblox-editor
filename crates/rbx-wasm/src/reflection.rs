@@ -71,6 +71,16 @@ fn enum_descriptor(class: &str, prop: &str) -> Option<&'static EnumDescriptor<'s
     db().enums.get(enum_name)
 }
 
+/// The declared type of a property (searching base classes), e.g. for parsing Rojo values.
+pub fn property_type(class: &str, prop: &str) -> Option<DataType<'static>> {
+    Some(find_property(class, prop)?.data_type.clone())
+}
+
+/// Value of an enum item by name, e.g. ("Material", "Neon") -> 288.
+pub fn enum_value(enum_name: &str, item: &str) -> Option<u32> {
+    db().enums.get(enum_name)?.items.get(item).copied()
+}
+
 /// Properties Studio doesn't show: hidden, deprecated, or not scriptable at all.
 /// Unknown properties are shown.
 pub fn is_hidden(class: &str, prop: &str) -> bool {

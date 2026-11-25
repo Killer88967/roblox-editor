@@ -2,9 +2,10 @@ use rbx_dom_weak::types::{Ref, Variant};
 use rbx_dom_weak::{Instance, WeakDom, ustr};
 use serde::Serialize;
 
-use crate::reflection::is_a;
+use crate::reflection::{enum_item, is_a};
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RenderPart {
     id: String,
     shape: &'static str,
@@ -13,6 +14,29 @@ pub struct RenderPart {
     color: [f32; 3],
     transparency: f32,
     material: u32,
+    /// Material enum item name, e.g. "Neon" (None if unknown).
+    material_name: Option<&'static str>,
+    reflectance: f32,
+    /// A SpecialMesh (or legacy BlockMesh/CylinderMesh) child that reshapes the part.
+    mesh: Option<MeshInfo>,
+    /// Decal/Texture children, drawn as tinted overlays on their faces (images need assets).
+    decals: Vec<DecalInfo>,
+}
+
+#[derive(Serialize)]
+pub struct MeshInfo {
+    /// MeshType item name: "Brick", "Sphere", "Cylinder", "Wedge", "Head", "FileMesh", ...
+    kind: &'static str,
+    scale: [f32; 3],
+    offset: [f32; 3],
+}
+
+#[derive(Serialize)]
+pub struct DecalInfo {
+    /// NormalId item name: "Right", "Top", "Back", "Left", "Bottom", "Front".
+    face: &'static str,
+    color: [f32; 3],
+    transparency: f32,
 }
 
 fn prop<'a>(inst: &'a Instance, keys: &[&str]) -> Option<&'a Variant> {
@@ -86,14 +110,14 @@ fn renderable(dom: &WeakDom, inst: &Instance) -> bool {
 pub fn render_parts(dom: &WeakDom) -> Vec<RenderPart> {
     dom.descendants()
         .filter(|inst| renderable(dom, inst))
-        .map(to_render_part)
+        .map(|inst| to_render_part(dom, inst))
         .collect()
 }
 
 /// One instance, if it should be drawn.
 pub fn render_part(dom: &WeakDom, r: Ref) -> Option<RenderPart> {
     let inst = dom.get_by_ref(r)?;
-    renderable(dom, inst).then(|| to_render_part(inst))
+    renderable(dom, inst).then(|| to_render_part(dom, inst))
 }
 
 #[derive(Serialize)]
@@ -111,14 +135,77 @@ pub fn render_subtree(dom: &WeakDom, r: Ref) -> SubtreeRender {
         for inst in dom.descendants_of(r) {
             ids.push(inst.referent().to_string());
             if renderable(dom, inst) {
-                parts.push(to_render_part(inst));
+                parts.push(to_render_part(dom, inst));
             }
         }
     }
     SubtreeRender { ids, parts }
 }
 
-fn to_render_part(inst: &Instance) -> RenderPart {
+fn vec3(inst: &Instance, key: &str, default: [f32; 3]) -> [f32; 3] {
+    match prop(inst, &[key]) {
+        Some(Variant::Vector3(v)) => [v.x, v.y, v.z],
+        _ => default,
+    }
+}
+
+fn float(inst: &Instance, key: &str, default: f32) -> f32 {
+    match prop(inst, &[key]) {
+        Some(Variant::Float32(f)) => *f,
+        _ => default,
+    }
+}
+
+fn mesh_info(dom: &WeakDom, part: &Instance) -> Option<MeshInfo> {
+    part.children().iter().find_map(|&c| {
+        let child = dom.get_by_ref(c)?;
+        let kind = match child.class.as_str() {
+            "SpecialMesh" => match prop(child, &["MeshType"]) {
+                Some(Variant::Enum(e)) => enum_item("SpecialMesh", "MeshType", e.to_u32())?,
+                _ => "Head",
+            },
+            "BlockMesh" => "Brick",
+            "CylinderMesh" => "Cylinder",
+            _ => return None,
+        };
+        Some(MeshInfo {
+            kind,
+            scale: vec3(child, "Scale", [1.0, 1.0, 1.0]),
+            offset: vec3(child, "Offset", [0.0, 0.0, 0.0]),
+        })
+    })
+}
+
+fn decals(dom: &WeakDom, part: &Instance) -> Vec<DecalInfo> {
+    part.children()
+        .iter()
+        .filter_map(|&c| {
+            let child = dom.get_by_ref(c)?;
+            if !matches!(child.class.as_str(), "Decal" | "Texture") {
+                return None;
+            }
+            let face = match prop(child, &["Face"]) {
+                Some(Variant::Enum(e)) => enum_item(child.class.as_str(), "Face", e.to_u32())?,
+                _ => "Front",
+            };
+            let color = match prop(child, &["Color3"]) {
+                Some(Variant::Color3(c)) => [c.r, c.g, c.b],
+                _ => [1.0, 1.0, 1.0],
+            };
+            Some(DecalInfo {
+                face,
+                color,
+                transparency: float(child, "Transparency", 0.0),
+            })
+        })
+        .collect()
+}
+
+fn to_render_part(dom: &WeakDom, inst: &Instance) -> RenderPart {
+    let material = match prop(inst, &["Material"]) {
+        Some(Variant::Enum(e)) => e.to_u32(),
+        _ => 256,
+    };
     RenderPart {
         id: inst.referent().to_string(),
         shape: shape(inst),
@@ -132,10 +219,11 @@ fn to_render_part(inst: &Instance) -> RenderPart {
             Some(Variant::Float32(t)) => *t,
             _ => 0.0,
         },
-        material: match prop(inst, &["Material"]) {
-            Some(Variant::Enum(e)) => e.to_u32(),
-            _ => 256,
-        },
+        material,
+        material_name: enum_item("Part", "Material", material),
+        reflectance: float(inst, "Reflectance", 0.0),
+        mesh: mesh_info(dom, inst),
+        decals: decals(dom, inst),
     }
 }
 
@@ -151,6 +239,13 @@ mod tests {
         // Baseplate, location1-6, Part, SpawnLocation (Terrain and parts outside Workspace excluded)
         assert_eq!(parts.len(), 9);
         assert!(parts.iter().all(|p| p.shape == "block"));
+        assert!(parts.iter().all(|p| p.material_name == Some("Plastic")));
+        // The Baseplate has a Texture on its top face.
+        assert!(
+            parts
+                .iter()
+                .any(|p| p.decals.iter().any(|d| d.face == "Top"))
+        );
     }
 
     #[test]

@@ -1,11 +1,15 @@
 mod js_ops;
+mod lighting;
 mod reflection;
 mod render;
+mod rojo;
 mod value;
 
 use rbx_core::{Document, Editor, Format, Op};
 use rbx_dom_weak::types::{Ref, Variant};
 use rbx_dom_weak::{InstanceBuilder, WeakDom};
+use std::collections::{BTreeMap, HashMap};
+
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -60,6 +64,8 @@ struct PropertyInfo {
 #[wasm_bindgen]
 pub struct WasmEditor {
     inner: Editor,
+    /// Problems found while importing (e.g. skipped Rojo files).
+    warnings: Vec<String>,
 }
 
 #[wasm_bindgen]
@@ -69,6 +75,7 @@ impl WasmEditor {
         let doc = Document::load(bytes).map_err(js_err)?;
         Ok(Self {
             inner: Editor::new(doc),
+            warnings: Vec::new(),
         })
     }
 
@@ -89,7 +96,42 @@ impl WasmEditor {
         );
         Self {
             inner: Editor::new(Document::from_dom(dom)),
+            warnings: Vec::new(),
         }
+    }
+
+    /// Builds a place from Rojo project files: `{ "default.project.json": bytes, "src/...": bytes }`.
+    /// Anything skipped is reported by `takeWarnings()`.
+    #[wasm_bindgen(js_name = fromRojo)]
+    pub fn from_rojo(files: JsValue) -> Result<WasmEditor, JsError> {
+        let files: HashMap<String, serde_bytes::ByteBuf> =
+            serde_wasm_bindgen::from_value(files).map_err(js_err)?;
+        let files: HashMap<String, Vec<u8>> =
+            files.into_iter().map(|(k, v)| (k, v.into_vec())).collect();
+        let (dom, warnings) = rojo::import(&files).map_err(js_err)?;
+        Ok(Self {
+            inner: Editor::new(Document::from_dom(dom)),
+            warnings,
+        })
+    }
+
+    /// The place as Rojo project files: `{ path: Uint8Array }`, ready to zip.
+    #[wasm_bindgen(js_name = toRojo)]
+    pub fn to_rojo(&self, project_name: &str) -> Result<JsValue, JsError> {
+        let files: BTreeMap<String, serde_bytes::ByteBuf> =
+            rojo::export(self.inner.dom(), project_name)
+                .into_iter()
+                .map(|(k, v)| (k, serde_bytes::ByteBuf::from(v)))
+                .collect();
+        files
+            .serialize(&serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true))
+            .map_err(js_err)
+    }
+
+    /// Warnings from the last import, cleared once read.
+    #[wasm_bindgen(js_name = takeWarnings)]
+    pub fn take_warnings(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.warnings)
     }
 
     /// format: "binary" (.rbxl/.rbxm) or "xml" (.rbxlx/.rbxmx)
@@ -245,6 +287,11 @@ impl WasmEditor {
     #[wasm_bindgen(js_name = renderParts)]
     pub fn render_parts(&self) -> Result<JsValue, JsError> {
         serde_wasm_bindgen::to_value(&render::render_parts(self.inner.dom())).map_err(js_err)
+    }
+
+    /// Lighting service summary for the viewport (ambient, sun, fog, atmosphere).
+    pub fn lighting(&self) -> Result<JsValue, JsError> {
+        serde_wasm_bindgen::to_value(&lighting::lighting(self.inner.dom())).map_err(js_err)
     }
 
     /// One part's render data, or undefined if it shouldn't be drawn.

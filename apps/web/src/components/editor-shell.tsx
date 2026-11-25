@@ -1,11 +1,52 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { useEditor, type Tool } from "@/stores/editor";
 import { Explorer } from "./explorer";
 import { InsertDialog } from "./insert-dialog";
 import { Properties } from "./properties";
 import { Viewport } from "./viewport";
+
+// Monaco only runs in the browser, and is only needed once a script is opened.
+const ScriptEditor = dynamic(() => import("./script-editor").then((m) => m.ScriptEditor), {
+  ssr: false,
+});
+
+function TabBar() {
+  const openScripts = useEditor((s) => s.openScripts);
+  const activeTab = useEditor((s) => s.activeTab);
+  const nodes = useEditor((s) => s.nodes);
+  const setActiveTab = useEditor((s) => s.setActiveTab);
+  const closeScript = useEditor((s) => s.closeScript);
+  const tab = (active: boolean) =>
+    `flex shrink-0 items-center gap-1.5 border-r border-white/10 px-3 py-1.5 text-sm ${
+      active ? "bg-zinc-800 text-zinc-100" : "text-zinc-400 hover:bg-white/5"
+    }`;
+
+  return (
+    <div className="flex overflow-x-auto border-b border-white/10 bg-zinc-950">
+      <button type="button" className={tab(activeTab === null)} onClick={() => setActiveTab(null)}>
+        3D View
+      </button>
+      {openScripts.map((id) => (
+        <div key={id} className={tab(activeTab === id)}>
+          <button type="button" onClick={() => setActiveTab(id)}>
+            {nodes.get(id)?.name ?? "Script"}
+          </button>
+          <button
+            type="button"
+            aria-label="Close"
+            className="rounded px-1 text-zinc-500 hover:bg-white/10 hover:text-zinc-200"
+            onClick={() => closeScript(id)}
+          >
+            ×
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const btn =
   "rounded bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:opacity-40 disabled:hover:bg-white/10";
@@ -210,6 +251,7 @@ export function EditorShell() {
           <MenuItem onClick={() => s.exportSelection("rbxmx")} disabled={!hasSelection}>
             Export selection as .rbxmx
           </MenuItem>
+          <MenuItem onClick={s.exportRojo}>Export Rojo project (.zip)</MenuItem>
         </Menu>
         <button type="button" className={btn} onClick={s.undo} disabled={!s.canUndo}>
           Undo
@@ -376,8 +418,17 @@ export function EditorShell() {
             <Explorer />
           </aside>
         )}
-        <section className="relative min-w-0 flex-1">
-          <Viewport />
+        <section className="relative flex min-w-0 flex-1 flex-col">
+          {s.openScripts.length > 0 && <TabBar />}
+          <div className="relative min-h-0 flex-1">
+            {/* The 3D view stays mounted under script tabs so the camera keeps its place. */}
+            <Viewport />
+            {s.activeTab && (
+              <div className="absolute inset-0 z-[5] bg-[#1e1e1e]">
+                <ScriptEditor key={s.activeTab} id={s.activeTab} />
+              </div>
+            )}
+          </div>
         </section>
         {showProperties && (
           <aside className={`${panel} right-0 overflow-y-auto border-l border-white/10`}>
@@ -387,7 +438,7 @@ export function EditorShell() {
 
         {dragging && (
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center border-2 border-dashed border-blue-500 bg-blue-500/10 text-sm">
-            Drop a .rbxl / .rbxm / .rbxlx / .rbxmx file to open it
+            Drop a .rbxl / .rbxm / .rbxlx / .rbxmx file, or a Rojo project .zip, to open it
           </div>
         )}
       </main>

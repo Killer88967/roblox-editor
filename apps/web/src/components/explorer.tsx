@@ -1,17 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEditor } from "@/stores/editor";
+import type { NodeInfo } from "@/lib/types";
 
 const ROW_HEIGHT = 28;
+/** Drag payload type for moving instances within the Explorer. */
+const DRAG_TYPE = "application/x-rbxe-ids";
 
 type Row = { id: string; depth: number };
 
-function TreeRow({ id, depth }: Row) {
+function TreeRow({
+  id,
+  depth,
+  searching,
+  dropTarget,
+  onDropTarget,
+}: Row & {
+  searching: boolean;
+  dropTarget: boolean;
+  onDropTarget: (id: string | null) => void;
+}) {
   const node = useEditor((s) => s.nodes.get(id));
   const selected = useEditor((s) => s.selection.includes(id));
   const open = useEditor((s) => s.expanded.has(id));
+  const isService = useEditor((s) => s.nodes.get(id)?.parent === s.rootId);
   const select = useEditor((s) => s.select);
   const toggle = useEditor((s) => s.toggleExpanded);
 
@@ -20,12 +34,40 @@ function TreeRow({ id, depth }: Row) {
 
   return (
     <div
+      draggable={!isService}
+      onDragStart={(e) => {
+        // Dragging a selected row moves the whole selection.
+        const { selection } = useEditor.getState();
+        const ids = selection.includes(id) ? selection : [id];
+        e.dataTransfer.setData(DRAG_TYPE, JSON.stringify(ids));
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!dropTarget) onDropTarget(id);
+      }}
+      onDragLeave={() => onDropTarget(null)}
+      onDrop={(e) => {
+        const raw = e.dataTransfer.getData(DRAG_TYPE);
+        onDropTarget(null);
+        if (!raw) return;
+        e.preventDefault();
+        e.stopPropagation();
+        useEditor.getState().moveInto(JSON.parse(raw) as string[], id);
+      }}
       onClick={(e) =>
         select(id, e.metaKey || e.ctrlKey ? "toggle" : e.shiftKey ? "add" : "replace")
       }
+      onDoubleClick={() => useEditor.getState().openScript(id)}
       style={{ paddingLeft: depth * 12 + 4, height: ROW_HEIGHT }}
       className={`flex cursor-default select-none items-center gap-1 rounded pr-2 text-sm ${
-        selected ? "bg-blue-600/40" : "hover:bg-white/5"
+        dropTarget
+          ? "bg-blue-500/30 ring-1 ring-blue-400"
+          : selected
+            ? "bg-blue-600/40"
+            : "hover:bg-white/5"
       }`}
     >
       <button
@@ -34,15 +76,34 @@ function TreeRow({ id, depth }: Row) {
         className="h-full w-5 shrink-0 text-xs text-zinc-500"
         onClick={(e) => {
           e.stopPropagation();
-          if (hasChildren) toggle(id);
+          if (hasChildren && !searching) toggle(id);
         }}
       >
-        {hasChildren ? (open ? "▾" : "▸") : ""}
+        {hasChildren ? (open || searching ? "▾" : "▸") : ""}
       </button>
       <span className="truncate">{node.name}</span>
       <span className="ml-auto shrink-0 pl-2 text-xs text-zinc-500">{node.class}</span>
     </div>
   );
+}
+
+/** Ids matching the search, plus every ancestor of a match (so the path is shown). */
+function searchTree(nodes: Map<string, NodeInfo>, query: string) {
+  const matches = new Set<string>();
+  const visible = new Set<string>();
+  for (const [id, node] of nodes) {
+    if (node.name.toLowerCase().includes(query) || node.class.toLowerCase().includes(query)) {
+      matches.add(id);
+      for (
+        let cur: string | undefined = id;
+        cur && !visible.has(cur);
+        cur = nodes.get(cur)?.parent
+      ) {
+        visible.add(cur);
+      }
+    }
+  }
+  return { matches, visible };
 }
 
 export function Explorer() {
@@ -51,25 +112,36 @@ export function Explorer() {
   const expanded = useEditor((s) => s.expanded);
   const primary = useEditor((s) => s.selection.at(-1));
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+
+  const q = query.trim().toLowerCase();
+  const search = useMemo(() => (q ? searchTree(nodes, q) : null), [nodes, q]);
 
   // Flatten only the visible part of the tree; the virtualizer renders a window of it.
   const rows = useMemo(() => {
     const out: Row[] = [];
     const root = rootId ? nodes.get(rootId) : undefined;
     if (!root) return out;
-    const stack: Row[] = root.children.map((id) => ({ id, depth: 0 })).reverse();
+    const shown = (id: string) => !search || search.visible.has(id);
+    const stack: Row[] = root.children
+      .filter(shown)
+      .map((id) => ({ id, depth: 0 }))
+      .reverse();
     while (stack.length) {
       const row = stack.pop()!;
       out.push(row);
       const node = nodes.get(row.id);
-      if (node && expanded.has(row.id)) {
+      // While searching, paths to matches are always open.
+      const open = search ? search.visible.has(row.id) : expanded.has(row.id);
+      if (node && open) {
         for (let i = node.children.length - 1; i >= 0; i--) {
-          stack.push({ id: node.children[i], depth: row.depth + 1 });
+          if (shown(node.children[i])) stack.push({ id: node.children[i], depth: row.depth + 1 });
         }
       }
     }
     return out;
-  }, [rootId, nodes, expanded]);
+  }, [rootId, nodes, expanded, search]);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -88,20 +160,38 @@ export function Explorer() {
   if (!rootId) return <p className="p-3 text-sm text-zinc-500">No file open</p>;
 
   return (
-    <div ref={scrollRef} className="h-full overflow-auto p-1">
-      <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
-        {virtualizer.getVirtualItems().map((item) => {
-          const row = rows[item.index];
-          return (
-            <div
-              key={row.id}
-              className="absolute inset-x-0 top-0"
-              style={{ transform: `translateY(${item.start}px)` }}
-            >
-              <TreeRow id={row.id} depth={row.depth} />
-            </div>
-          );
-        })}
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b border-white/10 p-1.5">
+        <input
+          className="min-w-0 flex-1 rounded bg-white/5 px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+          placeholder="Search name or class…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+        />
+        {search && <span className="shrink-0 text-xs text-zinc-500">{search.matches.size}</span>}
+      </div>
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto p-1">
+        <div className="relative" style={{ height: virtualizer.getTotalSize() }}>
+          {virtualizer.getVirtualItems().map((item) => {
+            const row = rows[item.index];
+            return (
+              <div
+                key={row.id}
+                className="absolute inset-x-0 top-0"
+                style={{ transform: `translateY(${item.start}px)` }}
+              >
+                <TreeRow
+                  id={row.id}
+                  depth={row.depth}
+                  searching={!!search}
+                  dropTarget={dropTarget === row.id}
+                  onDropTarget={setDropTarget}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
