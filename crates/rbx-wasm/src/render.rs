@@ -1,4 +1,4 @@
-use rbx_dom_weak::types::Variant;
+use rbx_dom_weak::types::{Ref, Variant};
 use rbx_dom_weak::{Instance, WeakDom, ustr};
 use serde::Serialize;
 
@@ -78,32 +78,65 @@ fn in_workspace(dom: &WeakDom, inst: &Instance) -> bool {
     false
 }
 
+fn renderable(dom: &WeakDom, inst: &Instance) -> bool {
+    inst.class != "Terrain" && is_a(inst.class.as_str(), "BasePart") && in_workspace(dom, inst)
+}
+
+/// Everything under Workspace that should be drawn.
 pub fn render_parts(dom: &WeakDom) -> Vec<RenderPart> {
     dom.descendants()
-        .filter(|inst| {
-            inst.class != "Terrain"
-                && is_a(inst.class.as_str(), "BasePart")
-                && in_workspace(dom, inst)
-        })
-        .map(|inst| RenderPart {
-            id: inst.referent().to_string(),
-            shape: shape(inst),
-            size: match prop(inst, &["Size", "size"]) {
-                Some(Variant::Vector3(v)) => [v.x, v.y, v.z],
-                _ => [4.0, 1.0, 2.0],
-            },
-            matrix: matrix(inst),
-            color: color(inst),
-            transparency: match prop(inst, &["Transparency"]) {
-                Some(Variant::Float32(t)) => *t,
-                _ => 0.0,
-            },
-            material: match prop(inst, &["Material"]) {
-                Some(Variant::Enum(e)) => e.to_u32(),
-                _ => 256,
-            },
-        })
+        .filter(|inst| renderable(dom, inst))
+        .map(to_render_part)
         .collect()
+}
+
+/// One instance, if it should be drawn.
+pub fn render_part(dom: &WeakDom, r: Ref) -> Option<RenderPart> {
+    let inst = dom.get_by_ref(r)?;
+    renderable(dom, inst).then(|| to_render_part(inst))
+}
+
+#[derive(Serialize)]
+pub struct SubtreeRender {
+    /// Every instance in the subtree (drawn or not), so callers can drop stale parts.
+    ids: Vec<String>,
+    parts: Vec<RenderPart>,
+}
+
+/// An instance and all its descendants, e.g. after it was reparented or pasted.
+pub fn render_subtree(dom: &WeakDom, r: Ref) -> SubtreeRender {
+    let mut ids = Vec::new();
+    let mut parts = Vec::new();
+    if dom.get_by_ref(r).is_some() {
+        for inst in dom.descendants_of(r) {
+            ids.push(inst.referent().to_string());
+            if renderable(dom, inst) {
+                parts.push(to_render_part(inst));
+            }
+        }
+    }
+    SubtreeRender { ids, parts }
+}
+
+fn to_render_part(inst: &Instance) -> RenderPart {
+    RenderPart {
+        id: inst.referent().to_string(),
+        shape: shape(inst),
+        size: match prop(inst, &["Size", "size"]) {
+            Some(Variant::Vector3(v)) => [v.x, v.y, v.z],
+            _ => [4.0, 1.0, 2.0],
+        },
+        matrix: matrix(inst),
+        color: color(inst),
+        transparency: match prop(inst, &["Transparency"]) {
+            Some(Variant::Float32(t)) => *t,
+            _ => 0.0,
+        },
+        material: match prop(inst, &["Material"]) {
+            Some(Variant::Enum(e)) => e.to_u32(),
+            _ => 256,
+        },
+    }
 }
 
 #[cfg(test)]
@@ -118,5 +151,27 @@ mod tests {
         // Baseplate, location1-6, Part, SpawnLocation (Terrain and parts outside Workspace excluded)
         assert_eq!(parts.len(), 9);
         assert!(parts.iter().all(|p| p.shape == "block"));
+    }
+
+    #[test]
+    fn subtree_includes_root_and_descendants() {
+        let bytes = include_bytes!("../../rbx-core/tests/fixtures/thing.rbxl");
+        let doc = Document::load(bytes).unwrap();
+        let dom = doc.dom();
+        let ws = dom
+            .root()
+            .children()
+            .iter()
+            .copied()
+            .find(|r| dom.get_by_ref(*r).unwrap().class == "Workspace")
+            .unwrap();
+
+        let sub = super::render_subtree(dom, ws);
+        assert_eq!(sub.parts.len(), 9);
+        assert!(sub.ids.contains(&ws.to_string()));
+
+        let first = sub.parts[0].id.parse().unwrap();
+        assert!(super::render_part(dom, first).is_some());
+        assert!(super::render_part(dom, ws).is_none());
     }
 }

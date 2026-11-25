@@ -10,7 +10,7 @@ type Row = { id: string; depth: number };
 
 function TreeRow({ id, depth }: Row) {
   const node = useEditor((s) => s.nodes.get(id));
-  const selected = useEditor((s) => s.selectedId === id);
+  const selected = useEditor((s) => s.selection.includes(id));
   const open = useEditor((s) => s.expanded.has(id));
   const select = useEditor((s) => s.select);
   const toggle = useEditor((s) => s.toggleExpanded);
@@ -20,7 +20,9 @@ function TreeRow({ id, depth }: Row) {
 
   return (
     <div
-      onClick={() => select(id)}
+      onClick={(e) =>
+        select(id, e.metaKey || e.ctrlKey ? "toggle" : e.shiftKey ? "add" : "replace")
+      }
       style={{ paddingLeft: depth * 12 + 4, height: ROW_HEIGHT }}
       className={`flex cursor-default select-none items-center gap-1 rounded pr-2 text-sm ${
         selected ? "bg-blue-600/40" : "hover:bg-white/5"
@@ -47,7 +49,7 @@ export function Explorer() {
   const rootId = useEditor((s) => s.rootId);
   const nodes = useEditor((s) => s.nodes);
   const expanded = useEditor((s) => s.expanded);
-  const selectedId = useEditor((s) => s.selectedId);
+  const primary = useEditor((s) => s.selection.at(-1));
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Flatten only the visible part of the tree; the virtualizer renders a window of it.
@@ -78,10 +80,10 @@ export function Explorer() {
 
   // Keep the selection in view (e.g. after picking a part in the viewport).
   useEffect(() => {
-    if (!selectedId) return;
-    const index = rows.findIndex((r) => r.id === selectedId);
+    if (!primary) return;
+    const index = rows.findIndex((r) => r.id === primary);
     if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
-  }, [selectedId, rows, virtualizer]);
+  }, [primary, rows, virtualizer]);
 
   if (!rootId) return <p className="p-3 text-sm text-zinc-500">No file open</p>;
 

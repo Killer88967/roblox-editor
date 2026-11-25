@@ -9,6 +9,15 @@ pub enum Op {
         parent: Ref,
         class: String,
         name: String,
+        /// Initial properties (e.g. class defaults plus anything the caller sets).
+        properties: Vec<(String, Variant)>,
+        /// Caller-chosen ref, so later ops in the same batch can target the new instance.
+        id: Option<Ref>,
+    },
+    /// Inserts a copy of a model (a binary .rbxm with exactly one root) under `parent`.
+    Paste {
+        parent: Ref,
+        model: Vec<u8>,
     },
     Delete {
         target: Ref,
@@ -36,7 +45,7 @@ impl Op {
     /// Every instance this op touches (used for change tracking).
     pub fn refs(&self) -> Vec<Ref> {
         match self {
-            Op::Create { parent, .. } => vec![*parent],
+            Op::Create { parent, .. } | Op::Paste { parent, .. } => vec![*parent],
             Op::Delete { target } | Op::SetName { target, .. } | Op::SetProperty { target, .. } => {
                 vec![*target]
             }
@@ -47,17 +56,42 @@ impl Op {
     }
 }
 
-/// Applies one op. Returns its inverse and, for Create, the new ref.
+/// Applies one op. Returns its inverse and, for Create/Paste, the new ref.
 pub fn apply(dom: &mut WeakDom, graveyard: &mut WeakDom, op: Op) -> Result<(Op, Option<Ref>)> {
     match op {
         Op::Create {
             parent,
             class,
             name,
+            properties,
+            id,
         } => {
             exists(dom, parent)?;
-            let target = dom.insert(parent, InstanceBuilder::new(class.as_str()).with_name(name));
+            let mut builder = InstanceBuilder::new(class.as_str())
+                .with_name(name)
+                .with_properties(properties.into_iter().map(|(k, v)| (ustr(&k), v)));
+            if let Some(id) = id {
+                if dom.get_by_ref(id).is_some() || graveyard.get_by_ref(id).is_some() {
+                    return Err(CoreError::InvalidOp(
+                        "an instance with that id already exists",
+                    ));
+                }
+                builder = builder.with_referent(id);
+            }
+            let target = dom.insert(parent, builder);
             Ok((Op::Delete { target }, Some(target)))
+        }
+        Op::Paste { parent, model } => {
+            exists(dom, parent)?;
+            let mut source = rbx_binary::from_reader(model.as_slice())?;
+            let &[root] = source.root().children() else {
+                return Err(CoreError::InvalidOp(
+                    "pasted model must have exactly one root",
+                ));
+            };
+            // Refs from decoding are freshly generated, so they can't collide with ours.
+            source.transfer(root, dom, parent);
+            Ok((Op::Delete { target: root }, Some(root)))
         }
         Op::Delete { target } => {
             not_root(dom, target)?;
