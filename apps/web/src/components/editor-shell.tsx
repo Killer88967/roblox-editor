@@ -424,7 +424,7 @@ export function EditorShell() {
             {/* The 3D view stays mounted under script tabs so the camera keeps its place. */}
             <Viewport />
             {s.activeTab && (
-              <div className="absolute inset-0 z-[5] bg-[#1e1e1e]">
+              <div className="absolute inset-0 z-5 bg-[#1e1e1e]">
                 <ScriptEditor key={s.activeTab} id={s.activeTab} />
               </div>
             )}
