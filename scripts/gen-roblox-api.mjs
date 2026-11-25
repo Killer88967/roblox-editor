@@ -55,9 +55,13 @@ const params = (list) =>
   });
 const returns = (list) => (list ?? []).map((r) => String(r.type)).join(", ") || undefined;
 
-/** Members scripts can use: no hidden/internal ones, no Roblox-only security. */
+/**
+ * Members scripts can use: not NotScriptable, and no Roblox-only security. ("Hidden" and
+ * "NotBrowsable" only hide things from Studio's panels; scripts can still use them, e.g.
+ * TextLabel.Font.)
+ */
 function usable(m, kind) {
-  if (tagged(m, "Hidden") || tagged(m, "NotScriptable") || tagged(m, "NotBrowsable")) return false;
+  if (tagged(m, "NotScriptable")) return false;
   const sec = m.security;
   if (kind === "p") return !sec || sec.read === "None";
   return !sec || sec === "None";

@@ -1,5 +1,13 @@
 import type { NodeInfo } from "./types";
 import { findMember, type Api, type ApiMember } from "./roblox-api";
+import {
+  analyze,
+  fieldsOf,
+  sourceOf,
+  type Analysis,
+  type Field,
+  type Source,
+} from "./luau-analyze";
 
 /** One step after the root of a chain like `script.Parent:WaitForChild("Frame").Title`. */
 export type Step =
@@ -41,19 +49,13 @@ export function parseChain(expr: string): Chain | null {
 /** The first string literal in an argument list: `"Frame", 5` -> `Frame`. */
 const firstString = (args: string) => args.match(/^\s*["']([^"']*)["']/)?.[1];
 
-/** The right-hand side of the last `local name = ...` / `name = ...` in `code`. */
-function lastAssignment(code: string, name: string): string | null {
-  const re = new RegExp(
-    `(?:^|\\n)[ \\t]*(?:local[ \\t]+)?${name}(?:[ \\t]*:[ \\t]*[\\w.?]+)?[ \\t]*=[ \\t]*([^\\n]+)`,
-    "g",
-  );
-  let found: string | null = null;
-  for (const m of code.matchAll(re)) found = m[1];
-  // Drop a trailing comment.
-  return found?.replace(/--.*$/, "").trim() ?? null;
-}
-
-export type Tree = { nodes: Map<string, NodeInfo>; rootId: string; scriptId: string };
+export type Tree = {
+  nodes: Map<string, NodeInfo>;
+  rootId: string;
+  scriptId: string;
+  /** A script's Source, for following `require(module)`. */
+  source?: (id: string) => string;
+};
 
 /**
  * What an expression refers to:
@@ -61,15 +63,17 @@ export type Tree = { nodes: Map<string, NodeInfo>; rootId: string; scriptId: str
  * - value: a datatype or class value with no known instance (e.g. `RBXScriptSignal`, `Vector3`)
  * - static: a datatype or library namespace (`Vector3.`, `task.`, `Instance.`)
  * - enums / enum: `Enum.` and `Enum.Material.`
+ * - table: a Luau table with known fields (`local M = {}`, a required ModuleScript)
  */
 export type Target =
   | { kind: "instance"; className: string; id?: string }
   | { kind: "value"; type: string; event?: ApiMember }
   | { kind: "static"; name: string }
   | { kind: "enums" }
-  | { kind: "enum"; name: string };
+  | { kind: "enum"; name: string }
+  | { kind: "table"; name: string; fields: Field[]; an: Analysis };
 
-type Ctx = { tree: Tree; api: Api; code: string };
+type Ctx = { tree: Tree; api: Api; an: Analysis; at: number };
 
 const childNamed = (tree: Tree, parent: string, name: string) =>
   tree.nodes.get(parent)?.children.find((c) => tree.nodes.get(c)?.name === name);
@@ -85,9 +89,82 @@ function instance(ctx: Ctx, id: string | undefined): Target | null {
 /** A type name from the API as a target: classes become instances, others plain values. */
 function ofType(ctx: Ctx, type: string | undefined): Target | null {
   if (!type) return null;
-  const clean = type.replace(/\?$/, "").split(/[ ,|]/)[0];
+  const clean = type.trim().replace(/\?$/, "").split(/[ ,|]/)[0];
   if (ctx.api.classes[clean]) return { kind: "instance", className: clean };
+  // Enum-typed properties (`Enum.Material`) hold an EnumItem.
+  if (clean.startsWith("Enum.")) return { kind: "value", type: "EnumItem" };
   return { kind: "value", type: clean };
+}
+
+/** The element type of a list type: `Instances` -> Instance, `List<Player>` / `{Player}` -> Player. */
+export function elementType(type: string): string | undefined {
+  if (type === "Instances" || type === "Objects") return "Instance";
+  return type.match(/^(?:List|Array)<\s*(\w+)\s*>$/)?.[1] ?? type.match(/^\{\s*(\w+)\s*\}$/)?.[1];
+}
+
+/** Fields a ModuleScript returns, by reading its Source. */
+function moduleTable(ctx: Ctx, id: string): Target | null {
+  const node = ctx.tree.nodes.get(id);
+  const source = ctx.tree.source?.(id);
+  if (!node || node.class !== "ModuleScript" || source === undefined) return null;
+  const an = analyze(source);
+  return an.exports ? { kind: "table", name: node.name, fields: an.exports, an } : null;
+}
+
+/** Works out a variable's value from where it was assigned or declared. */
+function fromSource(ctx: Ctx, name: string, src: Source | undefined, depth: number): Target | null {
+  const table = (): Target | null => {
+    const fields = fieldsOf(ctx.an, name);
+    return fields.length ? { kind: "table", name, fields, an: ctx.an } : null;
+  };
+  if (!src) return table();
+  switch (src.k) {
+    case "type":
+      return ofType(ctx, src.text);
+    case "number":
+      return { kind: "value", type: "number" };
+    case "self":
+      return resolveIn({ ...ctx, at: src.at }, src.table, depth + 1);
+    case "connect": {
+      const signal = resolveIn({ ...ctx, at: src.at }, src.expr, depth + 1);
+      if (signal?.kind !== "value" || !signal.event) return null;
+      return ofType(ctx, signal.event.p?.[src.index]?.[1]);
+    }
+    case "iter": {
+      const inner = src.expr.match(/^(i?pairs)\s*\(([\s\S]*)\)$/);
+      if (src.index === 0) {
+        return inner?.[1] === "ipairs" || !inner ? { kind: "value", type: "number" } : null;
+      }
+      const list = resolveIn({ ...ctx, at: src.at }, inner ? inner[2] : src.expr, depth + 1);
+      if (list?.kind !== "value") return null;
+      return ofType(ctx, elementType(list.type));
+    }
+    case "rhs": {
+      const text = src.text.trim();
+      // `x :: Part` casts win.
+      const cast = text.match(/::\s*([\w.<>{}?]+)\s*$/);
+      if (cast) return ofType(ctx, cast[1]);
+      if (text.startsWith("{")) return table();
+      if (text.startsWith("function")) return { kind: "value", type: "function" };
+      if (/^["'`[]/.test(text)) return { kind: "value", type: "string" };
+      if (/^-?[\d.]/.test(text)) return { kind: "value", type: "number" };
+      if (/^(true|false)$/.test(text)) return { kind: "value", type: "boolean" };
+      const req = text.match(/^require\s*\(([\s\S]*)\)$/);
+      if (req) {
+        const mod = resolveIn({ ...ctx, at: src.at }, req[1], depth + 1);
+        return mod?.kind === "instance" && mod.id ? moduleTable(ctx, mod.id) : null;
+      }
+      const direct = resolveIn({ ...ctx, at: src.at }, text, depth + 1);
+      if (direct) return direct;
+      // `a or b`, `a and b`: try the first operand.
+      const first = text.split(/\s+(?:or|and)\s+/)[0];
+      if (first !== text) {
+        const t = resolveIn({ ...ctx, at: src.at }, first, depth + 1);
+        if (t) return t;
+      }
+      return table();
+    }
+  }
 }
 
 function resolveRoot(ctx: Ctx, root: string, depth: number): Target | null {
@@ -98,15 +175,30 @@ function resolveRoot(ctx: Ctx, root: string, depth: number): Target | null {
   if (root === "Enum") return { kind: "enums" };
 
   // Local variables win over globals with the same name.
-  const rhs = lastAssignment(ctx.code, root);
-  if (rhs) return depth < 8 ? resolveIn(ctx, rhs, depth + 1) : null;
+  const { decl, src } = sourceOf(ctx.an, root, ctx.at);
+  if (decl || src) return depth < 8 ? fromSource(ctx, root, src, depth) : null;
 
   if (api.datatypes[root] || api.libraries[root]) return { kind: "static", name: root };
-  return null;
+  // A global table only assigned through fields (`M.x = …`).
+  return fromSource(ctx, root, undefined, depth);
 }
 
-function step(ctx: Ctx, target: Target, s: Step): Target | null {
+function step(ctx: Ctx, target: Target, s: Step, depth: number): Target | null {
   const { tree, api } = ctx;
+
+  if (target.kind === "table") {
+    if (s.kind !== "member" && s.kind !== "method" && s.kind !== "index") return null;
+    const f = target.fields.find((x) => x.name === s.name);
+    if (!f) return null;
+    if (f.params || f.method) return { kind: "value", type: "function" };
+    if (!f.rhs || depth >= 8) return null;
+    return fromSource(
+      { ...ctx, an: target.an, at: f.rhs.at },
+      `${target.name}.${f.name}`,
+      { k: "rhs", ...f.rhs },
+      depth + 1,
+    );
+  }
 
   if (target.kind === "enums") {
     return s.kind === "member" && api.enums[s.name] ? { kind: "enum", name: s.name } : null;
@@ -134,6 +226,10 @@ function step(ctx: Ctx, target: Target, s: Step): Target | null {
       }
       const m = (api.datatypes[ns]?.statics ?? api.libraries[ns] ?? []).find((x) => x.n === fn);
       return ofType(ctx, m?.t);
+    }
+    // `event:Wait()` returns what the event passes to its handlers.
+    if (target.event && s.kind === "method" && s.name === "Wait") {
+      return ofType(ctx, target.event.p?.[0]?.[1]);
     }
     const members = api.datatypes[target.type]?.members ?? [];
     const name = s.kind === "member" || s.kind === "method" ? s.name : null;
@@ -174,6 +270,10 @@ function step(ctx: Ctx, target: Target, s: Step): Target | null {
           const found = instance(ctx, childNamed(tree, id, arg));
           if (found) return found;
         }
+        // `FindFirstChild("Humanoid")`: a name that's also a class name is usually that class.
+        if (arg && api.classes[arg] && !api.classes[arg].tags?.includes("Service")) {
+          return { kind: "instance", className: arg };
+        }
         return ofType(ctx, "Instance");
       case "FindFirstChildOfClass":
       case "FindFirstChildWhichIsA":
@@ -205,12 +305,13 @@ function step(ctx: Ctx, target: Target, s: Step): Target | null {
 }
 
 function resolveIn(ctx: Ctx, expr: string, depth: number): Target | null {
+  if (depth > 8) return null;
   const chain = parseChain(expr);
   if (!chain) return null;
   let target = resolveRoot(ctx, chain.root, depth);
   for (const s of chain.steps) {
     if (!target) return null;
-    target = step(ctx, target, s);
+    target = step(ctx, target, s, depth);
   }
   return target;
 }
@@ -219,12 +320,9 @@ function resolveIn(ctx: Ctx, expr: string, depth: number): Target | null {
  * Works out what an expression refers to by following it through the place and the API:
  * `script`, `game`, `workspace`, `.Parent`, child names, `["Name"]`, WaitForChild,
  * FindFirstChild(OfClass), GetService, Instance.new, properties and events, datatypes,
- * libraries, Enum, and local variables assigned from any of those.
+ * libraries, Enum, require(), tables, and variables assigned from any of those (including
+ * Connect handler parameters and loop variables). `at` is the offset the expression is at.
  */
-export function resolveExpression(expr: string, code: string, tree: Tree, api: Api) {
-  return resolveIn({ tree, api, code }, expr, 0);
+export function resolveExpression(expr: string, at: number, an: Analysis, tree: Tree, api: Api) {
+  return resolveIn({ tree, api, an, at }, expr, 0);
 }
-
-/** Matches the chain right before a `.`/`:` (or a word being typed after one). */
-export const CHAIN_BEFORE =
-  /([A-Za-z_]\w*(?:\s*(?:\.\s*[A-Za-z_]\w*|:\s*\w+\s*\([^()]*\)|\(\s*[^()]*\)|\[\s*["'][^"']+["']\s*\]))*)\s*([.:])\s*(\w*)$/;

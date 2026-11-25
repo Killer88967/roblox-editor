@@ -1,0 +1,2 @@
+# Generated data: diff as binary (small deltas in patches) and collapse on GitHub.
+apps/web/src/data/roblox-api.json -diff linguist-generated=true
