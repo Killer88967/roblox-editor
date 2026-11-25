@@ -46,6 +46,23 @@ export class WasmEditor {
         return ret !== 0;
     }
     /**
+     * One instance (and its descendants) as a binary model, for the clipboard.
+     * Paste it back with a `{ type: "paste", parent, model }` op.
+     * @param {string} id
+     * @returns {Uint8Array}
+     */
+    copy(id) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_copy(this.__wbg_ptr, ptr0, len0);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v2;
+    }
+    /**
      * @returns {WasmEditor}
      */
     static empty() {
@@ -75,6 +92,79 @@ export class WasmEditor {
             throw takeFromExternrefTable0(ret[1]);
         }
         return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * Just these instances as a model file (.rbxm / .rbxmx).
+     * @param {string[]} ids
+     * @param {string} format
+     * @returns {Uint8Array}
+     */
+    export(ids, format) {
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passArrayJsValueToWasm0(ids, wasm.__wbindgen_malloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(format, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__externref_drop_slice(ptr0, len0); wasm.__wbindgen_free(ptr0, len0 * 4, 4); }
+            throw e;
+        }
+        const ret = wasm.wasmeditor_export(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v3;
+    }
+    /**
+     * Class names for Insert Object, sorted.
+     * @returns {string[]}
+     */
+    static insertableClasses() {
+        const ret = wasm.wasmeditor_insertableClasses();
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]);
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
+     * Mirrors `Instance:IsA` for class names, e.g. `isA("SpawnLocation", "BasePart")`.
+     * @param {string} _class
+     * @param {string} ancestor
+     * @returns {boolean}
+     */
+    static isA(_class, ancestor) {
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passStringToWasm0(_class, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(ancestor, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.wasmeditor_isA(ptr0, len0, ptr1, len1);
+        return ret !== 0;
+    }
+    /**
+     * A fresh id for a `create` op, so later ops in the same batch can target it.
+     * @returns {string}
+     */
+    static newId() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.wasmeditor_newId();
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
     }
     /**
      * @param {Uint8Array | number[]} bytes
@@ -138,11 +228,39 @@ export class WasmEditor {
         return ret[0] !== 0;
     }
     /**
+     * One part's render data, or undefined if it shouldn't be drawn.
+     * @param {string} id
+     * @returns {any}
+     */
+    renderPart(id) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_renderPart(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * Everything under Workspace that should be drawn.
      * @returns {any}
      */
     renderParts() {
         const ret = wasm.wasmeditor_renderParts(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * `{ ids, parts }` for an instance and all its descendants.
+     * @param {string} id
+     * @returns {any}
+     */
+    renderSubtree(id) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_renderSubtree(this.__wbg_ptr, ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -639,6 +757,16 @@ function passArray8ToWasm0(arg, malloc) {
     const ptr = malloc(arg.length * 1, 1) >>> 0;
     getUint8ArrayMemory0().set(arg, ptr / 1);
     WASM_VECTOR_LEN = arg.length;
+    return ptr;
+}
+
+function passArrayJsValueToWasm0(array, malloc) {
+    const ptr = malloc(array.length * 4, 4) >>> 0;
+    for (let i = 0; i < array.length; i++) {
+        const add = addToExternrefTable0(array[i]);
+        getDataViewMemory0().setUint32(ptr + 4 * i, add, true);
+    }
+    WASM_VECTOR_LEN = array.length;
     return ptr;
 }
 
