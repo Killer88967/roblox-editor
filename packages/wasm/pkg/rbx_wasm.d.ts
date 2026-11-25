@@ -10,11 +10,32 @@ export class WasmEditor {
     apply(ops: any): string[];
     canRedo(): boolean;
     canUndo(): boolean;
+    /**
+     * One instance (and its descendants) as a binary model, for the clipboard.
+     * Paste it back with a `{ type: "paste", parent, model }` op.
+     */
+    copy(id: string): Uint8Array;
     static empty(): WasmEditor;
     /**
      * Items for an enum property's dropdown: [{ name, value }].
      */
     enumItems(id: string, key: string): any;
+    /**
+     * Just these instances as a model file (.rbxm / .rbxmx).
+     */
+    export(ids: string[], format: string): Uint8Array;
+    /**
+     * Class names for Insert Object, sorted.
+     */
+    static insertableClasses(): string[];
+    /**
+     * Mirrors `Instance:IsA` for class names, e.g. `isA("SpawnLocation", "BasePart")`.
+     */
+    static isA(_class: string, ancestor: string): boolean;
+    /**
+     * A fresh id for a `create` op, so later ops in the same batch can target it.
+     */
+    static newId(): string;
     constructor(bytes: Uint8Array | number[]);
     node(id: string): any;
     /**
@@ -24,9 +45,17 @@ export class WasmEditor {
     properties(id: string): any;
     redo(): boolean;
     /**
+     * One part's render data, or undefined if it shouldn't be drawn.
+     */
+    renderPart(id: string): any;
+    /**
      * Everything under Workspace that should be drawn.
      */
     renderParts(): any;
+    /**
+     * `{ ids, parts }` for an instance and all its descendants.
+     */
+    renderSubtree(id: string): any;
     rootId(): string;
     /**
      * format: "binary" (.rbxl/.rbxm) or "xml" (.rbxlx/.rbxmx)
@@ -50,14 +79,21 @@ export interface InitOutput {
     readonly wasmeditor_apply: (a: number, b: any) => [number, number, number, number];
     readonly wasmeditor_canRedo: (a: number) => number;
     readonly wasmeditor_canUndo: (a: number) => number;
+    readonly wasmeditor_copy: (a: number, b: number, c: number) => [number, number, number, number];
     readonly wasmeditor_empty: () => number;
     readonly wasmeditor_enumItems: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly wasmeditor_export: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly wasmeditor_insertableClasses: () => [number, number];
+    readonly wasmeditor_isA: (a: number, b: number, c: number, d: number) => number;
     readonly wasmeditor_new: (a: number, b: number) => [number, number, number];
+    readonly wasmeditor_newId: () => [number, number];
     readonly wasmeditor_node: (a: number, b: number, c: number) => [number, number, number];
     readonly wasmeditor_nodes: (a: number) => [number, number, number];
     readonly wasmeditor_properties: (a: number, b: number, c: number) => [number, number, number];
     readonly wasmeditor_redo: (a: number) => [number, number, number];
+    readonly wasmeditor_renderPart: (a: number, b: number, c: number) => [number, number, number];
     readonly wasmeditor_renderParts: (a: number) => [number, number, number];
+    readonly wasmeditor_renderSubtree: (a: number, b: number, c: number) => [number, number, number];
     readonly wasmeditor_rootId: (a: number) => [number, number];
     readonly wasmeditor_save: (a: number, b: number, c: number) => [number, number, number, number];
     readonly wasmeditor_takeDirty: (a: number) => [number, number];

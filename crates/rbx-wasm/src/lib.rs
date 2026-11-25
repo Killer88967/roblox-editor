@@ -25,6 +25,18 @@ fn js_err(e: impl std::fmt::Display) -> JsError {
     JsError::new(&e.to_string())
 }
 
+fn parse_refs(ids: &[String]) -> Result<Vec<Ref>, JsError> {
+    ids.iter().map(|id| parse_ref(id).map_err(js_err)).collect()
+}
+
+fn parse_format(format: &str) -> Result<Format, JsError> {
+    match format {
+        "binary" => Ok(Format::Binary),
+        "xml" => Ok(Format::Xml),
+        other => Err(js_err(format!("unknown format: {other}"))),
+    }
+}
+
 #[derive(Serialize)]
 struct NodeInfo {
     id: String,
@@ -82,12 +94,50 @@ impl WasmEditor {
 
     /// format: "binary" (.rbxl/.rbxm) or "xml" (.rbxlx/.rbxmx)
     pub fn save(&self, format: &str) -> Result<Vec<u8>, JsError> {
-        let format = match format {
-            "binary" => Format::Binary,
-            "xml" => Format::Xml,
-            other => return Err(js_err(format!("unknown format: {other}"))),
-        };
-        self.inner.document().save(format).map_err(js_err)
+        self.inner
+            .document()
+            .save(parse_format(format)?)
+            .map_err(js_err)
+    }
+
+    /// Just these instances as a model file (.rbxm / .rbxmx).
+    pub fn export(&self, ids: Vec<String>, format: &str) -> Result<Vec<u8>, JsError> {
+        let refs = parse_refs(&ids)?;
+        self.inner
+            .document()
+            .save_refs(&refs, parse_format(format)?)
+            .map_err(js_err)
+    }
+
+    /// One instance (and its descendants) as a binary model, for the clipboard.
+    /// Paste it back with a `{ type: "paste", parent, model }` op.
+    pub fn copy(&self, id: &str) -> Result<Vec<u8>, JsError> {
+        let r = parse_ref(id).map_err(js_err)?;
+        self.inner
+            .document()
+            .save_refs(&[r], Format::Binary)
+            .map_err(js_err)
+    }
+
+    /// A fresh id for a `create` op, so later ops in the same batch can target it.
+    #[wasm_bindgen(js_name = newId)]
+    pub fn new_id() -> String {
+        Ref::new().to_string()
+    }
+
+    /// Mirrors `Instance:IsA` for class names, e.g. `isA("SpawnLocation", "BasePart")`.
+    #[wasm_bindgen(js_name = isA)]
+    pub fn is_a(class: &str, ancestor: &str) -> bool {
+        reflection::is_a(class, ancestor)
+    }
+
+    /// Class names for Insert Object, sorted.
+    #[wasm_bindgen(js_name = insertableClasses)]
+    pub fn insertable_classes() -> Vec<String> {
+        reflection::insertable_classes()
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
     }
 
     #[wasm_bindgen(js_name = rootId)]
@@ -195,6 +245,20 @@ impl WasmEditor {
     #[wasm_bindgen(js_name = renderParts)]
     pub fn render_parts(&self) -> Result<JsValue, JsError> {
         serde_wasm_bindgen::to_value(&render::render_parts(self.inner.dom())).map_err(js_err)
+    }
+
+    /// One part's render data, or undefined if it shouldn't be drawn.
+    #[wasm_bindgen(js_name = renderPart)]
+    pub fn render_part(&self, id: &str) -> Result<JsValue, JsError> {
+        let r = parse_ref(id).map_err(js_err)?;
+        serde_wasm_bindgen::to_value(&render::render_part(self.inner.dom(), r)).map_err(js_err)
+    }
+
+    /// `{ ids, parts }` for an instance and all its descendants.
+    #[wasm_bindgen(js_name = renderSubtree)]
+    pub fn render_subtree(&self, id: &str) -> Result<JsValue, JsError> {
+        let r = parse_ref(id).map_err(js_err)?;
+        serde_wasm_bindgen::to_value(&render::render_subtree(self.inner.dom(), r)).map_err(js_err)
     }
 }
 

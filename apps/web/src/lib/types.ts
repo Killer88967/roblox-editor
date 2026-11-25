@@ -33,11 +33,23 @@ export type PropertyInfo = {
 };
 
 export type JsOp =
-  | { type: "create"; parent: string; class: string; name: string }
+  | {
+      type: "create";
+      parent: string;
+      class: string;
+      name: string;
+      /** Overrides on top of the class defaults. */
+      properties?: Record<string, Value>;
+      /** From WasmEditor.newId(), so later ops in the same batch can target it. */
+      id?: string;
+    }
+  | { type: "paste"; parent: string; model: Uint8Array }
   | { type: "delete"; target: string }
   | { type: "setName"; target: string; name: string }
   | { type: "setProperty"; target: string; key: string; value?: Value }
   | { type: "reparent"; target: string; parent: string };
+
+export type SubtreeRender = { ids: string[]; parts: RenderPart[] };
 
 export type RenderPart = {
   id: string;

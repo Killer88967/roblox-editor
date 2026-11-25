@@ -1,8 +1,11 @@
+use std::collections::HashMap;
+
 use rbx_core::Op;
 use rbx_dom_weak::types::Variant;
 use serde::Deserialize;
 
 use crate::parse_ref;
+use crate::reflection;
 use crate::value::Value;
 
 #[derive(Deserialize)]
@@ -12,6 +15,17 @@ pub enum JsOp {
         parent: String,
         class: String,
         name: String,
+        /// Overrides on top of the class's default properties.
+        #[serde(default)]
+        properties: HashMap<String, Value>,
+        /// Optional id from `newId()`, so later ops in the batch can target it.
+        id: Option<String>,
+    },
+    Paste {
+        parent: String,
+        /// A binary model from `copy()`.
+        #[serde(with = "serde_bytes")]
+        model: Vec<u8>,
     },
     Delete {
         target: String,
@@ -40,10 +54,25 @@ impl TryFrom<JsOp> for Op {
                 parent,
                 class,
                 name,
-            } => Op::Create {
+                properties,
+                id,
+            } => {
+                // Start from Roblox's defaults (like Instance.new), then apply overrides.
+                let mut props: HashMap<String, Variant> = reflection::default_properties(&class);
+                for (key, value) in properties {
+                    props.insert(key, Variant::try_from(value)?);
+                }
+                Op::Create {
+                    parent: parse_ref(&parent)?,
+                    class,
+                    name,
+                    properties: props.into_iter().collect(),
+                    id: id.as_deref().map(parse_ref).transpose()?,
+                }
+            }
+            JsOp::Paste { parent, model } => Op::Paste {
                 parent: parse_ref(&parent)?,
-                class,
-                name,
+                model,
             },
             JsOp::Delete { target } => Op::Delete {
                 target: parse_ref(&target)?,

@@ -1,6 +1,10 @@
 //! Thin helpers over the Roblox reflection database (already bundled by rbx_binary).
+use std::collections::HashMap;
+
+use rbx_dom_weak::types::Variant;
 use rbx_reflection::{
-    DataType, EnumDescriptor, PropertyDescriptor, PropertyTag, ReflectionDatabase, Scriptability,
+    ClassTag, DataType, EnumDescriptor, PropertyDescriptor, PropertyTag, ReflectionDatabase,
+    Scriptability,
 };
 use serde::Serialize;
 
@@ -77,6 +81,42 @@ pub fn is_hidden(class: &str, prop: &str) -> bool {
     })
 }
 
+/// Default property values for a new instance of `class`, like `Instance.new` gives.
+pub fn default_properties(class: &str) -> HashMap<String, Variant> {
+    let db = db();
+    let Some(desc) = db.classes.get(class) else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    // Walk base classes first so subclasses override their defaults.
+    let chain: Vec<_> = db.superclasses_iter(desc).collect();
+    for c in chain.into_iter().rev() {
+        for (key, value) in &c.default_properties {
+            out.insert((*key).to_owned(), value.clone());
+        }
+    }
+    out
+}
+
+/// Classes that can be created with Insert Object, sorted by name.
+pub fn insertable_classes() -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = db()
+        .classes
+        .values()
+        .filter(|c| {
+            !c.tags.contains(&ClassTag::NotCreatable)
+                && !c.tags.contains(&ClassTag::Service)
+                && !c.tags.contains(&ClassTag::Deprecated)
+                && !c.tags.contains(&ClassTag::NotBrowsable)
+                && !c.tags.contains(&ClassTag::Settings)
+                && !c.tags.contains(&ClassTag::UserSettings)
+        })
+        .map(|c| c.name)
+        .collect();
+    names.sort_unstable();
+    names
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -92,6 +132,13 @@ mod tests {
         assert!(is_hidden("Part", "Velocity"));
         assert!(!is_hidden("Part", "Size"));
         assert!(!is_hidden("Script", "Source"));
+        assert!(insertable_classes().contains(&"Part"));
+        assert!(!insertable_classes().contains(&"Workspace"));
+        assert!(matches!(
+            default_properties("Part").get("Anchored"),
+            Some(Variant::Bool(false))
+        ));
+        assert!(default_properties("Part").contains_key("Size"));
         assert!(
             enum_items("Part", "Material")
                 .iter()
