@@ -120,6 +120,19 @@ export class WasmEditor {
         return v3;
     }
     /**
+     * Builds a place from Rojo project files: `{ "default.project.json": bytes, "src/...": bytes }`.
+     * Anything skipped is reported by `takeWarnings()`.
+     * @param {any} files
+     * @returns {WasmEditor}
+     */
+    static fromRojo(files) {
+        const ret = wasm.wasmeditor_fromRojo(files);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return WasmEditor.__wrap(ret[0]);
+    }
+    /**
      * Class names for Insert Object, sorted.
      * @returns {string[]}
      */
@@ -149,6 +162,17 @@ export class WasmEditor {
         }
         const ret = wasm.wasmeditor_isA(ptr0, len0, ptr1, len1);
         return ret !== 0;
+    }
+    /**
+     * Lighting service summary for the viewport (ambient, sun, fog, atmosphere).
+     * @returns {any}
+     */
+    lighting() {
+        const ret = wasm.wasmeditor_lighting(this.__wbg_ptr);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
     }
     /**
      * A fresh id for a `create` op, so later ops in the same batch can target it.
@@ -308,6 +332,30 @@ export class WasmEditor {
         return v1;
     }
     /**
+     * Warnings from the last import, cleared once read.
+     * @returns {string[]}
+     */
+    takeWarnings() {
+        const ret = wasm.wasmeditor_takeWarnings(this.__wbg_ptr);
+        var v1 = getArrayJsValueFromWasm0(ret[0], ret[1]);
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v1;
+    }
+    /**
+     * The place as Rojo project files: `{ path: Uint8Array }`, ready to zip.
+     * @param {string} project_name
+     * @returns {any}
+     */
+    toRojo(project_name) {
+        const ptr0 = passStringToWasm0(project_name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_toRojo(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * @returns {boolean}
      */
     undo() {
@@ -328,6 +376,10 @@ function __wbg_get_imports() {
         __proto__: null,
         __wbg_Error_208446807d0d1e30: function(arg0, arg1) {
             const ret = Error(getStringFromWasm0(arg0, arg1));
+            return ret;
+        },
+        __wbg_Number_ff192a72a0dcdf6d: function(arg0) {
+            const ret = Number(arg0);
             return ret;
         },
         __wbg_String_8564e559799eccda: function(arg0, arg1) {
@@ -436,6 +488,10 @@ function __wbg_get_imports() {
                 wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
             }
         },
+        __wbg_from_eac91875c8a5ffa4: function(arg0) {
+            const ret = Array.from(arg0);
+            return ret;
+        },
         __wbg_getRandomValues_5d8c030b527203a6: function() { return handleError(function (arg0, arg1) {
             globalThis.crypto.getRandomValues(getArrayU8FromWasm0(arg0, arg1));
         }, arguments); },
@@ -516,6 +572,10 @@ function __wbg_get_imports() {
             const ret = new Array();
             return ret;
         },
+        __wbg_new_7075786089b89c5e: function() {
+            const ret = new Map();
+            return ret;
+        },
         __wbg_new_bb74001155cb8ca8: function() {
             const ret = new Error();
             return ret;
@@ -554,6 +614,10 @@ function __wbg_get_imports() {
             const ret = module.require;
             return ret;
         }, arguments); },
+        __wbg_set_8282f7e0d2d01336: function(arg0, arg1, arg2) {
+            const ret = arg0.set(arg1, arg2);
+            return ret;
+        },
         __wbg_set_d2d33b52458e984a: function(arg0, arg1, arg2) {
             arg0[arg1 >>> 0] = arg2;
         },

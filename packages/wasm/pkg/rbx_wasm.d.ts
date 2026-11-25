@@ -25,6 +25,11 @@ export class WasmEditor {
      */
     export(ids: string[], format: string): Uint8Array;
     /**
+     * Builds a place from Rojo project files: `{ "default.project.json": bytes, "src/...": bytes }`.
+     * Anything skipped is reported by `takeWarnings()`.
+     */
+    static fromRojo(files: any): WasmEditor;
+    /**
      * Class names for Insert Object, sorted.
      */
     static insertableClasses(): string[];
@@ -32,6 +37,10 @@ export class WasmEditor {
      * Mirrors `Instance:IsA` for class names, e.g. `isA("SpawnLocation", "BasePart")`.
      */
     static isA(_class: string, ancestor: string): boolean;
+    /**
+     * Lighting service summary for the viewport (ambient, sun, fog, atmosphere).
+     */
+    lighting(): any;
     /**
      * A fresh id for a `create` op, so later ops in the same batch can target it.
      */
@@ -65,6 +74,14 @@ export class WasmEditor {
      * Ids changed since the last call. If node(id) returns undefined, it was deleted.
      */
     takeDirty(): string[];
+    /**
+     * Warnings from the last import, cleared once read.
+     */
+    takeWarnings(): string[];
+    /**
+     * The place as Rojo project files: `{ path: Uint8Array }`, ready to zip.
+     */
+    toRojo(project_name: string): any;
     undo(): boolean;
 }
 
@@ -83,8 +100,10 @@ export interface InitOutput {
     readonly wasmeditor_empty: () => number;
     readonly wasmeditor_enumItems: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly wasmeditor_export: (a: number, b: number, c: number, d: number, e: number) => [number, number, number, number];
+    readonly wasmeditor_fromRojo: (a: any) => [number, number, number];
     readonly wasmeditor_insertableClasses: () => [number, number];
     readonly wasmeditor_isA: (a: number, b: number, c: number, d: number) => number;
+    readonly wasmeditor_lighting: (a: number) => [number, number, number];
     readonly wasmeditor_new: (a: number, b: number) => [number, number, number];
     readonly wasmeditor_newId: () => [number, number];
     readonly wasmeditor_node: (a: number, b: number, c: number) => [number, number, number];
@@ -97,6 +116,8 @@ export interface InitOutput {
     readonly wasmeditor_rootId: (a: number) => [number, number];
     readonly wasmeditor_save: (a: number, b: number, c: number) => [number, number, number, number];
     readonly wasmeditor_takeDirty: (a: number) => [number, number];
+    readonly wasmeditor_takeWarnings: (a: number) => [number, number];
+    readonly wasmeditor_toRojo: (a: number, b: number, c: number) => [number, number, number];
     readonly wasmeditor_undo: (a: number) => [number, number, number];
     readonly rust_zstd_wasm_shim_calloc: (a: number, b: number) => number;
     readonly rust_zstd_wasm_shim_free: (a: number) => void;
