@@ -53,8 +53,9 @@ jobs:
       - name: Build WASM package
         run: pnpm --filter @rbxe/wasm build
 
+      # `next typegen` generates route types (e.g. LayoutProps) that tsc needs.
       - name: Typecheck web app
-        run: pnpm --filter web exec tsc --noEmit
+        run: pnpm --filter web exec next typegen && pnpm --filter web exec tsc --noEmit
 
       - name: Lint web app
         run: pnpm --filter web lint
