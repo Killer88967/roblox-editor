@@ -1,8 +1,9 @@
 import { create } from "zustand";
+import { unzipSync, zipSync } from "fflate";
 import { del as idbDel, get as idbGet, set as idbSet } from "idb-keyval";
 import { loadWasm, WasmEditor } from "@/lib/wasm";
 import { viewportApi } from "@/lib/viewport-api";
-import type { JsOp, NodeInfo, RenderPart, SubtreeRender, Value } from "@/lib/types";
+import type { JsOp, LightingInfo, NodeInfo, RenderPart, SubtreeRender, Value } from "@/lib/types";
 
 export type Tool = "select" | "move" | "scale" | "rotate";
 
@@ -22,6 +23,8 @@ type EditorState = {
   rootId: string | null;
   nodes: Map<string, NodeInfo>;
   parts: Map<string, RenderPart>;
+  /** Lighting service summary for the viewport. */
+  lighting: LightingInfo | null;
   /** Selected ids in click order; the last one is the primary (shown in Properties). */
   selection: string[];
   /** Explorer rows whose children are shown. */
@@ -38,6 +41,9 @@ type EditorState = {
   /** Touch helpers: taps add to/remove from the selection; drags draw a selection box. */
   multiSelect: boolean;
   boxSelect: boolean;
+  /** Scripts open in editor tabs, and the active tab (null = the 3D view). */
+  openScripts: string[];
+  activeTab: string | null;
   /** Unsaved work found from a previous visit, offered for restore. */
   restorable: { fileName: string; savedAt: number } | null;
 
@@ -69,6 +75,14 @@ type EditorState = {
   paste: (into?: boolean) => void;
   group: () => void;
   ungroup: () => void;
+  /** Reparents instances (e.g. an Explorer drag). Selected ones move together. */
+  moveInto: (ids: string[], parent: string) => void;
+  /** Downloads the place as a Rojo project (.zip). */
+  exportRojo: () => void;
+
+  openScript: (id: string) => void;
+  closeScript: (id: string) => void;
+  setActiveTab: (id: string | null) => void;
 
   checkAutosave: () => Promise<void>;
   restoreAutosave: () => Promise<void>;
@@ -76,6 +90,10 @@ type EditorState = {
 };
 
 const AUTOSAVE_KEY = "rbxe:autosave";
+
+const SCRIPT_CLASSES = new Set(["Script", "LocalScript", "ModuleScript"]);
+export const isScriptClass = (className: string | undefined) =>
+  !!className && SCRIPT_CLASSES.has(className);
 const AUTOSAVE_DELAY = 1500;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -103,8 +121,11 @@ function fresh(editor: WasmEditor, fileName: string) {
     rootId,
     nodes,
     parts,
+    lighting: editor.lighting() as LightingInfo,
     selection: [],
     expanded: new Set(workspace ? [rootId, workspace] : [rootId]),
+    openScripts: [],
+    activeTab: null,
     canUndo: false,
     canRedo: false,
     error: null,
@@ -149,7 +170,20 @@ export const useEditor = create<EditorState>()((set, get) => {
       }
     };
 
-    for (const id of editor.takeDirty()) {
+    const dirty = editor.takeDirty();
+    // A part's look also depends on some children (SpecialMesh, Decal, Texture),
+    // so when a child changes, redraw the part it belongs to.
+    const touched = new Set(dirty);
+    for (const id of dirty) {
+      for (const parent of [
+        nodes.get(id)?.parent,
+        (editor.node(id) as NodeInfo | undefined)?.parent,
+      ]) {
+        if (parent && parts.has(parent)) touched.add(parent);
+      }
+    }
+
+    for (const id of touched) {
       const before = nodes.get(id);
       const now = editor.node(id) as NodeInfo | undefined;
       if (!now) {
@@ -178,12 +212,21 @@ export const useEditor = create<EditorState>()((set, get) => {
       }
     }
 
+    // Lighting is a handful of values; only replace it when something actually changed.
+    const lighting = editor.lighting() as LightingInfo;
+    const prevLighting = get().lighting;
+    const sameLighting = JSON.stringify(lighting) === JSON.stringify(prevLighting);
+
     set({
       nodes: nextNodes,
       parts: nextParts,
+      lighting: sameLighting ? prevLighting : lighting,
       canUndo: editor.canUndo(),
       canRedo: editor.canRedo(),
       selection: selection.filter((id) => nextNodes.has(id)),
+      // Close tabs for scripts that were deleted.
+      openScripts: get().openScripts.filter((id) => nextNodes.has(id)),
+      activeTab: get().activeTab && nextNodes.has(get().activeTab!) ? get().activeTab : null,
     });
     scheduleAutosave();
   };
@@ -244,6 +287,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     rootId: null,
     nodes: new Map(),
     parts: new Map(),
+    lighting: null,
     selection: [],
     expanded: new Set(),
     focusRequest: 0,
@@ -255,12 +299,31 @@ export const useEditor = create<EditorState>()((set, get) => {
     clipboard: [],
     multiSelect: false,
     boxSelect: false,
+    openScripts: [],
+    activeTab: null,
     restorable: null,
 
     async openFile(file) {
       await loadWasm();
       try {
-        const editor = new WasmEditor(new Uint8Array(await file.arrayBuffer()));
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        if (/\.zip$/i.test(file.name)) {
+          // A zipped Rojo project: default.project.json plus its source files.
+          const files: Record<string, Uint8Array> = {};
+          for (const [path, data] of Object.entries(unzipSync(bytes))) {
+            if (!path.endsWith("/") && !path.startsWith("__MACOSX/")) files[path] = data;
+          }
+          const editor = WasmEditor.fromRojo(files);
+          const warnings = editor.takeWarnings();
+          get().editor?.free();
+          set(fresh(editor, file.name.replace(/\.zip$/i, ".rbxl")));
+          if (warnings.length) {
+            const more = warnings.length > 3 ? ` (+${warnings.length - 3} more)` : "";
+            set({ error: `Imported with warnings: ${warnings.slice(0, 3).join("; ")}${more}` });
+          }
+          return;
+        }
+        const editor = new WasmEditor(bytes);
         get().editor?.free();
         set(fresh(editor, file.name));
       } catch (e) {
@@ -460,6 +523,58 @@ export const useEditor = create<EditorState>()((set, get) => {
       }
       get().apply(ops);
       selectOnly(freed);
+    },
+
+    openScript(id) {
+      const { openScripts, nodes } = get();
+      if (!isScriptClass(nodes.get(id)?.class)) return;
+      set({
+        openScripts: openScripts.includes(id) ? openScripts : [...openScripts, id],
+        activeTab: id,
+      });
+    },
+
+    closeScript(id) {
+      const { openScripts, activeTab } = get();
+      const index = openScripts.indexOf(id);
+      const next = openScripts.filter((s) => s !== id);
+      set({
+        openScripts: next,
+        // Closing the active tab moves to its neighbor, or back to the 3D view.
+        activeTab: activeTab === id ? (next[Math.min(index, next.length - 1)] ?? null) : activeTab,
+      });
+    },
+
+    setActiveTab: (activeTab) => set({ activeTab }),
+
+    moveInto(ids, parent) {
+      const { nodes } = get();
+      const chosen = new Set(ids);
+      // Only move the outermost of the dragged instances; skip services and no-ops.
+      const roots = ids.filter((id) => {
+        for (let p = nodes.get(id)?.parent; p; p = nodes.get(p)?.parent) {
+          if (chosen.has(p)) return false;
+        }
+        return id !== parent && !isService(id) && nodes.get(id)?.parent !== parent;
+      });
+      if (roots.length === 0) return;
+      get().apply(roots.map((target) => ({ type: "reparent", target, parent })));
+      set({ expanded: new Set([...get().expanded, parent]) });
+    },
+
+    exportRojo() {
+      const { editor, fileName } = get();
+      if (!editor) return;
+      try {
+        const base = fileName.replace(/\.rbx[lm]x?$/i, "") || "place";
+        const files = editor.toRojo(base) as Record<string, Uint8Array>;
+        // Put everything in a folder named after the project, like a repo checkout.
+        const zipped: Record<string, Uint8Array> = {};
+        for (const [path, data] of Object.entries(files)) zipped[`${base}/${path}`] = data;
+        download(zipSync(zipped), `${base}.zip`);
+      } catch (e) {
+        set({ error: message(e) });
+      }
     },
 
     async checkAutosave() {

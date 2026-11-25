@@ -13,6 +13,8 @@ export type Value =
   | { type: "Ref"; value?: string }
   | { type: "UDim"; value: UDim }
   | { type: "UDim2"; value: { x: UDim; y: UDim } }
+  /** Asset URI like "rbxassetid://123" ("" = none). */
+  | { type: "Content" | "ContentId"; value: string }
   | { type: "Unsupported"; value: { ty: string; text: string } };
 
 export type NodeInfo = {
@@ -51,6 +53,34 @@ export type JsOp =
 
 export type SubtreeRender = { ids: string[]; parts: RenderPart[] };
 
+export type MeshInfo = {
+  /** SpecialMesh MeshType name: "Brick", "Sphere", "Cylinder", "Wedge", "Head", "FileMesh", ... */
+  kind: string;
+  scale: V3;
+  offset: V3;
+};
+
+export type DecalInfo = {
+  face: "Right" | "Top" | "Back" | "Left" | "Bottom" | "Front";
+  color: V3;
+  transparency: number;
+};
+
+export type LightingInfo = {
+  id?: string;
+  ambient: V3;
+  outdoorAmbient: V3;
+  brightness: number;
+  /** Hours, 0-24. */
+  clockTime: number;
+  geographicLatitude: number;
+  fogColor: V3;
+  fogStart: number;
+  fogEnd: number;
+  atmosphere?: { density: number; haze: number; color: V3 };
+  hasSky: boolean;
+};
+
 export type RenderPart = {
   id: string;
   shape: "block" | "ball" | "cylinder" | "wedge" | "cornerWedge" | "placeholder";
@@ -59,6 +89,11 @@ export type RenderPart = {
   color: V3;
   transparency: number;
   material: number;
+  /** Material enum name, e.g. "Neon". */
+  materialName?: string;
+  reflectance: number;
+  mesh?: MeshInfo;
+  decals: DecalInfo[];
 };
 
 const round = (n: number) => +n.toFixed(3);
@@ -82,6 +117,9 @@ export function formatValue(v: Value): string {
       const { x, y } = v.value;
       return `{${round(x.scale)}, ${x.offset}}, {${round(y.scale)}, ${y.offset}}`;
     }
+    case "Content":
+    case "ContentId":
+      return v.value;
     case "Unsupported":
       return v.value.text;
     default:

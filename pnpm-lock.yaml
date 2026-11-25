@@ -238,6 +238,9 @@ importers:
 
   apps/web:
     dependencies:
+      "@monaco-editor/react":
+        specifier: ^4.7.0
+        version: 4.7.0(monaco-editor@0.58.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       "@rbxe/wasm":
         specifier: workspace:*
         version: link:../../packages/wasm
@@ -250,6 +253,9 @@ importers:
       "@tanstack/react-virtual":
         specifier: ^3.14.28
         version: 3.14.28(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       idb-keyval:
         specifier: ^6.3.0
         version: 6.3.0
@@ -836,6 +842,22 @@ packages:
         integrity: sha512-CZWV/q6TTe8ta61cZXjfnnHsfWIdFhms03M9T7Cnd5y2mdpylJM0rF1qRq+wsQVRMLz1OYPVEBU9ph2Bx8cxrg==,
       }
 
+  "@monaco-editor/loader@1.7.0":
+    resolution:
+      {
+        integrity: sha512-gIwR1HrJrrx+vfyOhYmCZ0/JcWqG5kbfG7+d3f/C1LXk2EvzAbHSg3MQ5lO2sMlo9izoAZ04shohfKLVT6crVA==,
+      }
+
+  "@monaco-editor/react@4.7.0":
+    resolution:
+      {
+        integrity: sha512-cyzXQCtO47ydzxpQtCGSQGOC8Gk3ZUeBXFAxD+CWXYFo5OqZyZUonFl0DwUlTyAfRHntBfw2p3w4s9R6oe1eCA==,
+      }
+    peerDependencies:
+      monaco-editor: ">= 0.25.0 < 1"
+      react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
   "@monogrid/gainmap-js@3.7.3":
     resolution:
       {
@@ -1289,6 +1311,12 @@ packages:
         integrity: sha512-v+vKNarUtk4n2QRZ4+CN5ygMM0ARUjXjIQl0R/unMUfmStFeVqGbgqarbrpoGTXRZoulSH16ePrVJVxPJEbMUA==,
       }
 
+  "@types/trusted-types@2.0.7":
+    resolution:
+      {
+        integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==,
+      }
+
   "@types/webxr@0.5.24":
     resolution:
       {
@@ -1579,6 +1607,12 @@ packages:
       }
     peerDependencies:
       react: ">= 16.8.0"
+
+  "@vscode/diff@0.0.2-145":
+    resolution:
+      {
+        integrity: sha512-atPcmNrAU4B8OsbrmqYlHbZREt//m8z52o400YA8uuvq3Be5wnmIhLoLqhMum7Jv7kRC0FE+m3WAUbaZF681wg==,
+      }
 
   acorn-jsx@5.3.2:
     resolution:
@@ -1970,6 +2004,12 @@ packages:
         integrity: sha512-35mSku4ZXK0vfCuHEDAwt55dg2jNajHZ1odvF+8SSr82EsZY4QmXfuWso8oEd8zRhVObSN18aM0CjSdoBX7zIw==,
       }
     engines: { node: ">=0.10.0" }
+
+  dompurify@3.4.17:
+    resolution:
+      {
+        integrity: sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==,
+      }
 
   draco3d@1.5.9:
     resolution:
@@ -3056,6 +3096,14 @@ packages:
         integrity: sha512-oLLC2+YvQUfAa+vxoufE/yc1icb87M9iXIRqAoR/2EhE/8cb3SF/+Gi0c2By1B+5Vz2e2vQtUvHiu1+63Znh+w==,
       }
 
+  marked@14.0.0:
+    resolution:
+      {
+        integrity: sha512-uIj4+faQ+MgHgwUW1l2PsPglZLOLOT1uErt06dAPtx2kjteLAkbsd/0FiYg/MGS+i7ZKLb7w2WClxHkzOOuryQ==,
+      }
+    engines: { node: ">= 18" }
+    hasBin: true
+
   math-intrinsics@1.1.0:
     resolution:
       {
@@ -3108,6 +3156,12 @@ packages:
     resolution:
       {
         integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==,
+      }
+
+  monaco-editor@0.58.0:
+    resolution:
+      {
+        integrity: sha512-Lj5hlfT4zdM5GSG9VxTHslWnwibGBvO6d9Mq/+9zmb1CkTZnib4+uAZUKl1zg+tMHRgY2OGax6hHKZNBtldR1g==,
       }
 
   ms@2.1.3:
@@ -3575,6 +3629,12 @@ packages:
     resolution:
       {
         integrity: sha512-+L3ccpzibovGXFK+Ap/f8LOS0ahMrHTf3xu7mMLSpEGU0EO9ucaysSylKo9eRDFNhWve/y275iPmIZ4z39a9iA==,
+      }
+
+  state-local@1.0.7:
+    resolution:
+      {
+        integrity: sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==,
       }
 
   stats-gl@2.4.2:
@@ -4330,6 +4390,17 @@ snapshots:
 
   "@mediapipe/tasks-vision@0.10.17": {}
 
+  "@monaco-editor/loader@1.7.0":
+    dependencies:
+      state-local: 1.0.7
+
+  "@monaco-editor/react@4.7.0(monaco-editor@0.58.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)":
+    dependencies:
+      "@monaco-editor/loader": 1.7.0
+      monaco-editor: 0.58.0
+      react: 19.3.1
+      react-dom: 19.3.1(react@19.3.1)
+
   "@monogrid/gainmap-js@3.7.3(three@0.187.0)":
     dependencies:
       promise-worker-transferable: 1.0.4
@@ -4574,6 +4645,9 @@ snapshots:
       fflate: 0.8.3
       meshoptimizer: 1.1.1
 
+  "@types/trusted-types@2.0.7":
+    optional: true
+
   "@types/webxr@0.5.24": {}
 
   "@typescript-eslint/eslint-plugin@8.74.0(@typescript-eslint/parser@8.74.0(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3))(eslint@9.39.5(jiti@2.7.0)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3)":
@@ -4740,6 +4814,8 @@ snapshots:
     dependencies:
       "@use-gesture/core": 10.3.1
       react: 19.3.1
+
+  "@vscode/diff@0.0.2-145": {}
 
   acorn-jsx@5.3.2(acorn@8.19.0):
     dependencies:
@@ -4988,6 +5064,10 @@ snapshots:
   doctrine@2.1.0:
     dependencies:
       esutils: 2.0.3
+
+  dompurify@3.4.17:
+    optionalDependencies:
+      "@types/trusted-types": 2.0.7
 
   draco3d@1.5.9: {}
 
@@ -5759,6 +5839,8 @@ snapshots:
     dependencies:
       "@jridgewell/sourcemap-codec": 1.6.0
 
+  marked@14.0.0: {}
+
   math-intrinsics@1.1.0: {}
 
   merge2@1.4.1: {}
@@ -5784,6 +5866,12 @@ snapshots:
       brace-expansion: 1.1.22
 
   minimist@1.2.8: {}
+
+  monaco-editor@0.58.0:
+    dependencies:
+      "@vscode/diff": 0.0.2-145
+      dompurify: 3.4.17
+      marked: 14.0.0
 
   ms@2.1.3: {}
 
@@ -6110,6 +6198,8 @@ snapshots:
   source-map-js@1.2.4: {}
 
   stable-hash@0.0.5: {}
+
+  state-local@1.0.7: {}
 
   stats-gl@2.4.2(@types/three@0.187.0)(three@0.187.0):
     dependencies:

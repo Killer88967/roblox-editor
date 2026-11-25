@@ -6,7 +6,9 @@ import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from
 import * as THREE from "three";
 import { useEditor } from "@/stores/editor";
 import { viewportApi } from "@/lib/viewport-api";
-import type { JsOp, NodeInfo, RenderPart, Value } from "@/lib/types";
+import { materialLook } from "@/lib/materials";
+import type { DecalInfo, JsOp, NodeInfo, RenderPart, Value } from "@/lib/types";
+import { SceneLighting } from "./scene-lighting";
 
 type V3 = [number, number, number];
 
@@ -74,8 +76,41 @@ const cornerWedge = solid([
 const box = new THREE.BoxGeometry(1, 1, 1);
 const sphere = new THREE.SphereGeometry(0.5, 24, 16);
 const cylinder = new THREE.CylinderGeometry(0.5, 0.5, 1, 24).rotateZ(Math.PI / 2); // Roblox cylinders run along X
+// SpecialMesh / CylinderMesh shapes stand upright (along Y).
+const uprightCylinder = new THREE.CylinderGeometry(0.5, 0.5, 1, 24);
+const head = new THREE.CapsuleGeometry(0.5, 0.5, 6, 16).scale(1, 0.67, 1);
+const prism = new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
+const pyramid = new THREE.CylinderGeometry(0, 0.7071, 1, 4).rotateY(Math.PI / 4);
 
-function shapeOf(part: RenderPart): { geometry: THREE.BufferGeometry; scale: V3 } {
+type Shape = { geometry: THREE.BufferGeometry; scale: V3; offset?: V3 };
+
+/** Shape for a part reshaped by a SpecialMesh (or legacy Block/CylinderMesh). */
+function meshShape(part: RenderPart): Shape | null {
+  const mesh = part.mesh;
+  if (!mesh) return null;
+  const size = part.size.map((v, i) => v * mesh.scale[i]) as V3;
+  const geometry =
+    {
+      Brick: box,
+      Torso: box,
+      Sphere: sphere,
+      Cylinder: uprightCylinder,
+      Head: head,
+      Wedge: wedge,
+      CornerWedge: cornerWedge,
+      ParallelRamp: wedge,
+      RightAngleRamp: wedge,
+      Prism: prism,
+      Pyramid: pyramid,
+    }[mesh.kind] ?? null;
+  // FileMesh (and anything unknown) needs the mesh asset; shown as a placeholder.
+  if (!geometry) return null;
+  return { geometry, scale: size, offset: mesh.offset };
+}
+
+function shapeOf(part: RenderPart): Shape {
+  const fromMesh = meshShape(part);
+  if (fromMesh) return fromMesh;
   const [x, y, z] = part.size;
   switch (part.shape) {
     case "ball": {
@@ -133,6 +168,48 @@ function affectedParts(
   return out;
 }
 
+/** Where each face's overlay goes on a unit part, and how to turn a plane to face out. */
+const FACES: Record<DecalInfo["face"], { axis: 0 | 1 | 2; sign: 1 | -1; rotation: V3 }> = {
+  Right: { axis: 0, sign: 1, rotation: [0, Math.PI / 2, 0] },
+  Left: { axis: 0, sign: -1, rotation: [0, -Math.PI / 2, 0] },
+  Top: { axis: 1, sign: 1, rotation: [-Math.PI / 2, 0, 0] },
+  Bottom: { axis: 1, sign: -1, rotation: [Math.PI / 2, 0, 0] },
+  Back: { axis: 2, sign: 1, rotation: [0, 0, 0] },
+  Front: { axis: 2, sign: -1, rotation: [0, Math.PI, 0] },
+};
+
+/**
+ * Decal/Texture children, drawn as tinted overlays on their faces. The images themselves
+ * need Roblox assets (Phase 4's asset proxy), so this only shows where they are and
+ * their Color3/Transparency.
+ */
+function Decals({ part }: { part: RenderPart }) {
+  const [sx, sy, sz] = part.size;
+  return (
+    <>
+      {part.decals.map((d, i) => {
+        const face = FACES[d.face];
+        const position: V3 = [0, 0, 0];
+        position[face.axis] = (face.sign * part.size[face.axis]) / 2 + face.sign * 0.01;
+        const [w, h] = face.axis === 0 ? [sz, sy] : face.axis === 1 ? [sx, sz] : [sx, sy];
+        return (
+          <mesh key={i} position={position} rotation={face.rotation} raycast={() => null}>
+            <planeGeometry args={[w, h]} />
+            <meshBasicMaterial
+              color={new THREE.Color().setRGB(...d.color, THREE.SRGBColorSpace)}
+              transparent
+              opacity={(1 - d.transparency) * 0.6}
+              depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+            />
+          </mesh>
+        );
+      })}
+    </>
+  );
+}
+
 const PartMesh = memo(function PartMesh({
   part,
   selected,
@@ -145,8 +222,11 @@ const PartMesh = memo(function PartMesh({
     () => new THREE.Color().setRGB(...part.color, THREE.SRGBColorSpace),
     [part.color],
   );
-  const { geometry, scale } = shapeOf(part);
-  const transparent = part.transparency > 0;
+  const { geometry, scale, offset } = shapeOf(part);
+  const placeholder = part.shape === "placeholder" || part.mesh?.kind === "FileMesh";
+  const look = materialLook(part.materialName, part.reflectance);
+  const opacity = look.forceField ? Math.min(1 - part.transparency, 0.35) : 1 - part.transparency;
+  const transparent = opacity < 1;
 
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -180,6 +260,7 @@ const PartMesh = memo(function PartMesh({
         }}
         geometry={geometry}
         scale={scale}
+        position={offset}
         onClick={onClick}
         onDoubleClick={(e: ThreeEvent<MouseEvent>) => {
           e.stopPropagation();
@@ -190,14 +271,19 @@ const PartMesh = memo(function PartMesh({
       >
         <meshStandardMaterial
           color={color}
-          roughness={0.8}
-          wireframe={part.shape === "placeholder"}
+          roughness={look.roughness}
+          metalness={look.metalness}
+          emissive={look.emissive || look.forceField ? color : undefined}
+          emissiveIntensity={look.emissive ? 1.6 : look.forceField ? 0.6 : 0}
+          toneMapped={!look.emissive}
+          wireframe={placeholder}
           transparent={transparent}
-          opacity={1 - part.transparency}
+          opacity={opacity}
           depthWrite={!transparent}
         />
         {selected && <Edges color="#f5a524" />}
       </mesh>
+      {part.decals.length > 0 && !part.mesh && part.shape === "block" && <Decals part={part} />}
     </group>
   );
 });
@@ -548,9 +634,7 @@ export function Viewport() {
           useEditor.getState().select(null);
         }}
       >
-        <color attach="background" args={["#1b1f27"]} />
-        <hemisphereLight args={["#ffffff", "#3a3a3a", 1.2]} />
-        <directionalLight position={[50, 100, 30]} intensity={1.5} />
+        <SceneLighting />
         <Bounds key={rootId ?? "none"} fit clip margin={1.2}>
           {list.map((p) => (
             <PartMesh key={p.id} part={p} selected={affected.has(p.id)} />

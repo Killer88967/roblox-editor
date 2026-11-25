@@ -21,6 +21,8 @@ export const TEXT_EDITABLE = new Set<Value["type"]>([
   "CFrame",
   "UDim",
   "UDim2",
+  "Content",
+  "ContentId",
 ]);
 
 /**
@@ -77,6 +79,9 @@ export function parseValue(prev: Value, text: string): Value | null {
             },
           }
         : null;
+    case "Content":
+    case "ContentId":
+      return { type: prev.type, value: text.trim() };
     default:
       return null;
   }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useEditor } from "@/stores/editor";
+import { isScriptClass, useEditor } from "@/stores/editor";
 import type { PropertyInfo } from "@/lib/types";
 import { PropertyEditor, TextField } from "./property-editor";
 
@@ -16,13 +16,22 @@ export function Properties() {
   });
   const apply = useEditor((s) => s.apply);
   const [showHidden, setShowHidden] = useState(false);
+  const [filter, setFilter] = useState("");
 
   // `node` changes identity whenever that instance is dirtied, so this re-reads after edits.
   const all = useMemo(
     () => (editor && selectedId && node ? (editor.properties(selectedId) as PropertyInfo[]) : []),
     [editor, selectedId, node],
   );
-  const props = showHidden ? all : all.filter((p) => !p.hidden);
+  const isScript = isScriptClass(node?.class);
+  const query = filter.trim().toLowerCase();
+  const props = all.filter(
+    (p) =>
+      (showHidden || !p.hidden) &&
+      // Scripts are edited in their own tab, not as a one-line field.
+      !(isScript && p.key === "Source") &&
+      (!query || p.key.toLowerCase().includes(query)),
+  );
   const hiddenCount = all.length - all.filter((p) => !p.hidden).length;
 
   if (!node) return <p className="p-3 text-sm text-zinc-500">Nothing selected</p>;
@@ -54,6 +63,23 @@ export function Properties() {
             />
             Hidden ({hiddenCount})
           </label>
+        )}
+      </div>
+      <div className="flex gap-2 border-b border-white/10 px-3 py-1.5">
+        <input
+          className="min-w-0 flex-1 rounded bg-white/5 px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+          placeholder="Filter properties…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+        {isScript && (
+          <button
+            type="button"
+            className="shrink-0 rounded bg-blue-600/60 px-2 py-1 text-sm hover:bg-blue-600/70"
+            onClick={() => useEditor.getState().openScript(node.id)}
+          >
+            Edit script
+          </button>
         )}
       </div>
       <dl>
