@@ -1,12 +1,14 @@
 import "server-only";
 import { auth } from "./auth";
 import { db } from "./db";
+import { ACCOUNTS_ENABLED } from "@/lib/features";
 
 /** A JSON error response. */
 export const fail = (status: number, error: string) => Response.json({ error }, { status });
 
 /** The signed-in user for a request, or null. */
 export async function currentUser(request: Request) {
+  if (!ACCOUNTS_ENABLED) return null;
   const session = await auth.api.getSession({ headers: request.headers });
   return session?.user ?? null;
 }
@@ -26,6 +28,7 @@ export async function ownedProject(request: Request, id: string) {
 
 /** The project a share token gives view access to, if the token is valid. */
 export async function sharedProject(token: string | null) {
+  if (!ACCOUNTS_ENABLED) return null;
   if (!token || token.length < 16) return null;
   return db.project.findUnique({ where: { shareToken: token } });
 }

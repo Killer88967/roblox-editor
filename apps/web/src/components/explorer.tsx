@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { useEditor } from "@/stores/editor";
+import { isScriptClass, useEditor } from "@/stores/editor";
 import type { NodeInfo } from "@/lib/types";
 
 const ROW_HEIGHT = 28;
@@ -10,6 +10,41 @@ const ROW_HEIGHT = 28;
 const DRAG_TYPE = "application/x-rbxe-ids";
 
 type Row = { id: string; depth: number };
+
+/** Inline name editor: Enter or tapping away saves, Escape cancels. */
+function RenameBox({ name }: { name: string }) {
+  const finish = useEditor((s) => s.finishRename);
+  const ref = useRef<HTMLInputElement>(null);
+  const done = useRef(false);
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.select();
+  }, []);
+  const end = (value: string | null) => {
+    if (done.current) return;
+    done.current = true;
+    finish(value);
+  };
+  return (
+    <input
+      ref={ref}
+      defaultValue={name}
+      aria-label="New name"
+      spellCheck={false}
+      autoCapitalize="off"
+      autoCorrect="off"
+      className="min-w-0 flex-1 rounded bg-zinc-900 px-1 py-0.5 text-sm text-zinc-100 outline-none ring-1 ring-blue-500"
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") end(e.currentTarget.value);
+        else if (e.key === "Escape") end(null);
+      }}
+      onBlur={(e) => end(e.currentTarget.value)}
+    />
+  );
+}
 
 function TreeRow({
   id,
@@ -28,13 +63,14 @@ function TreeRow({
   const isService = useEditor((s) => s.nodes.get(id)?.parent === s.rootId);
   const select = useEditor((s) => s.select);
   const toggle = useEditor((s) => s.toggleExpanded);
+  const renaming = useEditor((s) => s.renaming === id);
 
   if (!node) return null;
   const hasChildren = node.children.length > 0;
 
   return (
     <div
-      draggable={!isService}
+      draggable={!isService && !renaming}
       onDragStart={(e) => {
         // Dragging a selected row moves the whole selection.
         const { selection } = useEditor.getState();
@@ -60,7 +96,12 @@ function TreeRow({
       onClick={(e) =>
         select(id, e.metaKey || e.ctrlKey ? "toggle" : e.shiftKey ? "add" : "replace")
       }
-      onDoubleClick={() => useEditor.getState().openScript(id)}
+      // Scripts open on double-click (like Studio); anything else gets renamed.
+      onDoubleClick={() => {
+        const st = useEditor.getState();
+        if (isScriptClass(node.class)) st.openScript(id);
+        else st.startRename(id);
+      }}
       style={{ paddingLeft: depth * 12 + 4, height: ROW_HEIGHT }}
       className={`flex cursor-default select-none items-center gap-1 rounded pr-2 text-sm ${
         dropTarget
@@ -81,7 +122,7 @@ function TreeRow({
       >
         {hasChildren ? (open || searching ? "▾" : "▸") : ""}
       </button>
-      <span className="truncate">{node.name}</span>
+      {renaming ? <RenameBox name={node.name} /> : <span className="truncate">{node.name}</span>}
       <span className="ml-auto shrink-0 pl-2 text-xs text-zinc-500">{node.class}</span>
     </div>
   );

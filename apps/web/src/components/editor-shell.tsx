@@ -5,7 +5,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { quickSave, useEditor, type Tool } from "@/stores/editor";
-import { useSession } from "@/lib/auth-client";
+import { useAccountSession } from "@/lib/auth-client";
+import { ACCOUNTS_ENABLED } from "@/lib/features";
 import { AccountMenu } from "./account-menu";
 import { Explorer } from "./explorer";
 import { HistoryPanel } from "./history-panel";
@@ -176,14 +177,15 @@ export function EditorShell() {
   // null = follow screen size: panels open on wide screens, closed on narrow ones.
   const [explorerOverride, setExplorerOverride] = useState<boolean | null>(null);
   const [propertiesOverride, setPropertiesOverride] = useState<boolean | null>(null);
-  const showExplorer = explorerOverride ?? wide;
+  // The Explorer also opens while renaming, since that's where the name box is.
+  const showExplorer = (explorerOverride ?? wide) || !!s.renaming;
   const showProperties = propertiesOverride ?? wide;
   const [dragging, setDragging] = useState(false);
   const [inserting, setInserting] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [sharing, setSharing] = useState(false);
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session } = useAccountSession();
 
   const hasSelection = s.selection.length > 0;
   const cloud = s.cloud;
@@ -255,6 +257,7 @@ export function EditorShell() {
       else if (mod && key === "g") run(st.group);
       else if (mod && key === "u") run(st.ungroup);
       else if (mod && key === "i") run(() => st.editor && setInserting(true));
+      else if (key === "f2") run(() => st.startRename());
       else if (key === "delete" || key === "backspace") run(st.deleteSelection);
       else if (key === "escape") st.select(null);
       else if (!mod && key === "f") st.focusSelected();
@@ -315,7 +318,9 @@ export function EditorShell() {
               </MenuItem>
             </>
           )}
-          {!cloud && <MenuItem onClick={saveAsProject}>Save to your projects…</MenuItem>}
+          {!cloud && ACCOUNTS_ENABLED && (
+            <MenuItem onClick={saveAsProject}>Save to your projects…</MenuItem>
+          )}
           {readOnly && <MenuItem onClick={saveAsProject}>Make a copy in your projects…</MenuItem>}
           <MenuItem onClick={() => s.save("rbxl")}>Download .rbxl (binary)</MenuItem>
           <MenuItem onClick={() => s.save("rbxlx")}>Download .rbxlx (XML)</MenuItem>
@@ -440,6 +445,15 @@ export function EditorShell() {
 
           <button type="button" className={btn} onClick={() => setInserting(true)}>
             Insert…
+          </button>
+          <button
+            type="button"
+            title="Rename (F2, or double-click in the Explorer)"
+            className={btn}
+            onClick={() => s.startRename()}
+            disabled={!hasSelection}
+          >
+            Rename
           </button>
           <button
             type="button"

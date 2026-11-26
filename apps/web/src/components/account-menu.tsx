@@ -4,10 +4,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signOut, useSession } from "@/lib/auth-client";
+import { ACCOUNTS_ENABLED } from "@/lib/features";
 import { btn } from "./ui";
 
-/** "Sign in", or the signed-in user's menu (Projects, Sign out). */
+/** "Sign in", or the signed-in user's menu (Projects, Sign out). Hidden while accounts are off. */
 export function AccountMenu() {
+  return ACCOUNTS_ENABLED ? <Account /> : null;
+}
+
+function Account() {
   const { data, isPending } = useSession();
   const pathname = usePathname();
   const router = useRouter();
