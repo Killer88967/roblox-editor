@@ -2,7 +2,7 @@
 
 import Editor, { type Monaco, type OnMount } from "@monaco-editor/react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useEditor } from "@/stores/editor";
+import { quickSave, useEditor } from "@/stores/editor";
 import { registerLuau } from "@/lib/luau";
 import { registerCompletions } from "@/lib/luau-complete";
 import { attachLuauEditor, MARKER_OWNER } from "@/lib/luau-editor";
@@ -81,7 +81,7 @@ export function ScriptEditor({ id }: { id: string }) {
     committed.current = code.getValue();
     code.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       commit();
-      useEditor.getState().save();
+      quickSave();
     });
     code.onDidBlurEditorText(() => commit());
     detach.current = attachLuauEditor(monaco, code);
@@ -159,6 +159,7 @@ export function ScriptEditor({ id }: { id: string }) {
             smoothScrolling: true,
             cursorBlinking: "smooth",
             fixedOverflowWidgets: true,
+            readOnly: !!useEditor.getState().cloud?.readOnly,
             quickSuggestions: { other: true, comments: false, strings: true },
             suggest: { preview: true, showStatusBar: true },
             suggestSelection: "first",

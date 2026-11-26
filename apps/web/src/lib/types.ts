@@ -64,6 +64,12 @@ export type DecalInfo = {
   face: "Right" | "Top" | "Back" | "Left" | "Bottom" | "Front";
   color: V3;
   transparency: number;
+  /** The image as a content URI (e.g. "rbxassetid://123"); "" if none. */
+  texture: string;
+  /** Texture only: studs per tile (U, V). Null for a Decal, which stretches over the face. */
+  tile: [number, number] | null;
+  /** Texture only: tile offset in studs (U, V). */
+  offset: [number, number];
 };
 
 export type LightingInfo = {

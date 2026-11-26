@@ -7,6 +7,8 @@ import * as THREE from "three";
 import { useEditor } from "@/stores/editor";
 import { viewportApi } from "@/lib/viewport-api";
 import { materialLook } from "@/lib/materials";
+import { useAssetTexture } from "@/lib/asset-textures";
+import { registerThumbnailCapture } from "@/lib/thumbnail";
 import type { DecalInfo, JsOp, NodeInfo, RenderPart, Value } from "@/lib/types";
 import { SceneLighting } from "./scene-lighting";
 
@@ -179,35 +181,96 @@ const FACES: Record<DecalInfo["face"], { axis: 0 | 1 | 2; sign: 1 | -1; rotation
 };
 
 /**
- * Decal/Texture children, drawn as tinted overlays on their faces. The images themselves
- * need Roblox assets (Phase 4's asset proxy), so this only shows where they are and
- * their Color3/Transparency.
+ * One Decal/Texture on a face. Its image comes through the asset proxy when assets are
+ * available (signed in, or a share link); otherwise it's a tinted overlay showing where
+ * it is and its Color3/Transparency. Textures tile by StudsPerTileU/V.
  */
-function Decals({ part }: { part: RenderPart }) {
+function DecalFace({ part, decal }: { part: RenderPart; decal: DecalInfo }) {
+  const assetsEnabled = useEditor((s) => s.assetsEnabled);
+  const shareToken = useEditor((s) => s.cloud?.shareToken ?? null);
+  const image = useAssetTexture(decal.texture, assetsEnabled, shareToken);
   const [sx, sy, sz] = part.size;
+  const face = FACES[decal.face];
+  const position: V3 = [0, 0, 0];
+  position[face.axis] = (face.sign * part.size[face.axis]) / 2 + face.sign * 0.01;
+  const [w, h] = face.axis === 0 ? [sz, sy] : face.axis === 1 ? [sx, sz] : [sx, sy];
+
+  // Tiled textures need their own copy of the image to set repeat/offset on.
+  const map = useMemo(() => {
+    if (!image || !decal.tile) return image;
+    const t = image.clone();
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    const [tu, tv] = decal.tile;
+    t.repeat.set(w / Math.max(tu, 0.01), h / Math.max(tv, 0.01));
+    t.offset.set(decal.offset[0] / Math.max(tu, 0.01), -decal.offset[1] / Math.max(tv, 0.01));
+    t.needsUpdate = true;
+    return t;
+  }, [image, decal.tile, decal.offset, w, h]);
+  useEffect(
+    () => () => {
+      if (map && map !== image) map.dispose();
+    },
+    [map, image],
+  );
+
+  const color = useMemo(
+    () => new THREE.Color().setRGB(...decal.color, THREE.SRGBColorSpace),
+    [decal.color],
+  );
+  return (
+    <mesh position={position} rotation={face.rotation} raycast={() => null}>
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial
+        key={map ? "image" : "tint"}
+        map={map}
+        color={color}
+        transparent
+        opacity={(1 - decal.transparency) * (map ? 1 : 0.6)}
+        depthWrite={false}
+        polygonOffset
+        polygonOffsetFactor={-1}
+      />
+    </mesh>
+  );
+}
+
+function Decals({ part }: { part: RenderPart }) {
   return (
     <>
-      {part.decals.map((d, i) => {
-        const face = FACES[d.face];
-        const position: V3 = [0, 0, 0];
-        position[face.axis] = (face.sign * part.size[face.axis]) / 2 + face.sign * 0.01;
-        const [w, h] = face.axis === 0 ? [sz, sy] : face.axis === 1 ? [sx, sz] : [sx, sy];
-        return (
-          <mesh key={i} position={position} rotation={face.rotation} raycast={() => null}>
-            <planeGeometry args={[w, h]} />
-            <meshBasicMaterial
-              color={new THREE.Color().setRGB(...d.color, THREE.SRGBColorSpace)}
-              transparent
-              opacity={(1 - d.transparency) * 0.6}
-              depthWrite={false}
-              polygonOffset
-              polygonOffsetFactor={-1}
-            />
-          </mesh>
-        );
-      })}
+      {part.decals.map((d, i) => (
+        <DecalFace key={i} part={part} decal={d} />
+      ))}
     </>
   );
+}
+
+/** Lets cloud saves grab a small preview image of the current view. */
+function ThumbnailCapture() {
+  const gl = useThree((s) => s.gl);
+  const scene = useThree((s) => s.scene);
+  const camera = useThree((s) => s.camera);
+  useEffect(() => {
+    registerThumbnailCapture(async () => {
+      const W = 480;
+      const H = 270;
+      // Render now and copy straight away, while the drawing buffer still holds the frame.
+      gl.render(scene, camera);
+      const src = gl.domElement;
+      const out = document.createElement("canvas");
+      out.width = W;
+      out.height = H;
+      const ctx = out.getContext("2d");
+      if (!ctx || !src.width || !src.height) return null;
+      // Cover-crop the view to 16:9.
+      const scale = Math.max(W / src.width, H / src.height);
+      const dw = src.width * scale;
+      const dh = src.height * scale;
+      ctx.drawImage(src, (W - dw) / 2, (H - dh) / 2, dw, dh);
+      return new Promise<Blob | null>((resolve) => out.toBlob(resolve, "image/webp", 0.8));
+    });
+    return () => registerThumbnailCapture(null);
+  }, [gl, scene, camera]);
+  return null;
 }
 
 const PartMesh = memo(function PartMesh({
@@ -644,6 +707,7 @@ export function Viewport() {
         <FocusController affected={affected} />
         <TransformGizmo affected={affected} />
         <BoxSelect onRect={setRect} />
+        <ThumbnailCapture />
       </Canvas>
       {rect && (
         <div

@@ -2,8 +2,15 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { useEditor, type Tool } from "@/stores/editor";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { quickSave, useEditor, type Tool } from "@/stores/editor";
+import { useSession } from "@/lib/auth-client";
+import { AccountMenu } from "./account-menu";
 import { Explorer } from "./explorer";
+import { HistoryPanel } from "./history-panel";
+import { ShareDialog } from "./share-dialog";
+import { btn, primaryBtn } from "./ui";
 import { InsertDialog } from "./insert-dialog";
 import { Properties } from "./properties";
 import { Viewport } from "./viewport";
@@ -48,8 +55,6 @@ function TabBar() {
   );
 }
 
-const btn =
-  "rounded bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:opacity-40 disabled:hover:bg-white/10";
 const toggleBtn = (on: boolean) =>
   on ? "rounded bg-blue-600/60 px-3 py-1.5 text-sm hover:bg-blue-600/70" : btn;
 
@@ -175,8 +180,52 @@ export function EditorShell() {
   const showProperties = propertiesOverride ?? wide;
   const [dragging, setDragging] = useState(false);
   const [inserting, setInserting] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const router = useRouter();
+  const { data: session } = useSession();
 
   const hasSelection = s.selection.length > 0;
+  const cloud = s.cloud;
+  const readOnly = !!cloud?.readOnly;
+  const editable = !!cloud && !readOnly;
+
+  // Roblox images (decals, textures) load through the server for signed-in users and
+  // share-link viewers.
+  useEffect(() => {
+    useEditor.getState().setAssetsEnabled(!!session || !!cloud?.shareToken);
+  }, [session, cloud?.shareToken]);
+
+  // Warn before leaving a cloud project with changes that aren't saved yet.
+  useEffect(() => {
+    if (!editable || !s.unsaved) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [editable, s.unsaved]);
+
+  /** Saves what's open as a new cloud project (also "Make a copy" on share links). */
+  const saveAsProject = async () => {
+    if (!session) {
+      router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    const base = s.fileName.replace(/\.rbx[lm]x?$/i, "") || "Untitled place";
+    const name = prompt("Name for the new project", readOnly ? `${cloud?.name} (copy)` : base);
+    if (!name?.trim()) return;
+    const id = await useEditor.getState().saveAsNewProject(name.trim());
+    if (id) router.push(`/p/${id}`);
+  };
+
+  const status = s.cloudSaving
+    ? "Saving…"
+    : s.unsaved
+      ? "Unsaved changes"
+      : cloud?.viewing
+        ? `Viewing v${cloud.viewing.number}`
+        : cloud?.latest
+          ? `Saved · v${cloud.latest.number}`
+          : "Not saved yet";
 
   // Offer to restore unsaved work from last time.
   useEffect(() => {
@@ -199,7 +248,7 @@ export function EditorShell() {
 
       if (mod && key === "z") run(e.shiftKey ? st.redo : st.undo);
       else if (mod && key === "y") run(st.redo);
-      else if (mod && key === "s") run(() => st.save());
+      else if (mod && key === "s") run(quickSave);
       else if (mod && key === "c") run(st.copySelection);
       else if (mod && key === "v") run(() => st.paste(e.shiftKey));
       else if (mod && key === "d") run(st.duplicateSelection);
@@ -228,24 +277,48 @@ export function EditorShell() {
         >
           Explorer
         </button>
-        <label className={btn}>
-          Open
-          <input
-            type="file"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) s.openFile(file);
-              e.target.value = "";
-            }}
-          />
-        </label>
-        <button type="button" className={btn} onClick={s.newPlace}>
-          New
-        </button>
-        <Menu label="Save" disabled={!s.editor}>
-          <MenuItem onClick={() => s.save("rbxl")}>Save as .rbxl (binary)</MenuItem>
-          <MenuItem onClick={() => s.save("rbxlx")}>Save as .rbxlx (XML)</MenuItem>
+        {editable && (
+          <Link href="/dashboard" className={btn}>
+            Projects
+          </Link>
+        )}
+        {!readOnly && (
+          <label className={btn}>
+            Open
+            <input
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) s.openFile(file);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        )}
+        {!cloud && (
+          <button type="button" className={btn} onClick={s.newPlace}>
+            New
+          </button>
+        )}
+        <Menu label={editable ? "File" : "Save"} disabled={!s.editor}>
+          {editable && (
+            <>
+              <MenuItem onClick={() => s.saveToCloud()}>Save version (Ctrl+S)</MenuItem>
+              <MenuItem
+                onClick={() => {
+                  const note = prompt("What changed? (shown in version history)");
+                  if (note !== null) s.saveToCloud(note.trim() || undefined);
+                }}
+              >
+                Save version with a note…
+              </MenuItem>
+            </>
+          )}
+          {!cloud && <MenuItem onClick={saveAsProject}>Save to your projects…</MenuItem>}
+          {readOnly && <MenuItem onClick={saveAsProject}>Make a copy in your projects…</MenuItem>}
+          <MenuItem onClick={() => s.save("rbxl")}>Download .rbxl (binary)</MenuItem>
+          <MenuItem onClick={() => s.save("rbxlx")}>Download .rbxlx (XML)</MenuItem>
           <MenuItem onClick={() => s.exportSelection("rbxm")} disabled={!hasSelection}>
             Export selection as .rbxm
           </MenuItem>
@@ -254,23 +327,78 @@ export function EditorShell() {
           </MenuItem>
           <MenuItem onClick={s.exportRojo}>Export Rojo project (.zip)</MenuItem>
         </Menu>
-        <button type="button" className={btn} onClick={s.undo} disabled={!s.canUndo}>
-          Undo
-        </button>
-        <button type="button" className={btn} onClick={s.redo} disabled={!s.canRedo}>
-          Redo
-        </button>
-        <span className="ml-auto truncate text-sm text-zinc-400">{s.fileName}</span>
+        {!readOnly && (
+          <>
+            <button type="button" className={btn} onClick={s.undo} disabled={!s.canUndo}>
+              Undo
+            </button>
+            <button type="button" className={btn} onClick={s.redo} disabled={!s.canRedo}>
+              Redo
+            </button>
+          </>
+        )}
+        <span className="ml-auto flex min-w-0 items-center gap-2 text-sm">
+          {!readOnly && (
+            <span className="truncate text-zinc-300">{cloud ? cloud.name : s.fileName}</span>
+          )}
+          {editable && (
+            <span className={`shrink-0 text-xs ${s.unsaved ? "text-amber-400" : "text-zinc-500"}`}>
+              {status}
+            </span>
+          )}
+        </span>
+        {editable && (
+          <>
+            <button
+              type="button"
+              className={primaryBtn}
+              disabled={s.cloudSaving || (!s.unsaved && !cloud?.viewing && !!cloud?.latest)}
+              onClick={() => s.saveToCloud()}
+            >
+              {s.cloudSaving ? "Saving…" : "Save"}
+            </button>
+            <button
+              type="button"
+              className={toggleBtn(showHistory)}
+              onClick={() => setShowHistory(!showHistory)}
+            >
+              History
+            </button>
+            <button type="button" className={btn} onClick={() => setSharing(true)}>
+              Share
+            </button>
+          </>
+        )}
         <button
           type="button"
-          className={toggleBtn(showProperties)}
-          onClick={() => setPropertiesOverride(!showProperties)}
+          className={toggleBtn(showProperties && !showHistory)}
+          onClick={() => {
+            setShowHistory(false);
+            setPropertiesOverride(showHistory ? true : !showProperties);
+          }}
         >
           Properties
         </button>
+        <AccountMenu />
       </header>
 
-      {s.editor && (
+      {readOnly && cloud && (
+        <div className="flex flex-wrap items-center gap-2 bg-zinc-800 px-3 py-2 text-sm">
+          <span>
+            <b>{cloud.name}</b>
+            {cloud.latest && <span className="text-zinc-400"> · v{cloud.latest.number}</span>}
+            <span className="text-zinc-400"> · View only</span>
+          </span>
+          <button type="button" className={`${primaryBtn} ml-auto`} onClick={saveAsProject}>
+            {session ? "Make a copy" : "Sign in to make a copy"}
+          </button>
+          <button type="button" className={btn} onClick={() => s.save("rbxl")}>
+            Download
+          </button>
+        </div>
+      )}
+
+      {s.editor && !readOnly && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-2 py-1.5">
           <div className="flex overflow-hidden rounded">
             {TOOLS.map((t) => (
@@ -431,10 +559,16 @@ export function EditorShell() {
             )}
           </div>
         </section>
-        {showProperties && (
-          <aside className={`${panel} right-0 overflow-y-auto border-l border-white/10`}>
-            <Properties />
+        {showHistory && editable ? (
+          <aside className={`${panel} right-0 overflow-hidden border-l border-white/10`}>
+            <HistoryPanel onClose={() => setShowHistory(false)} />
           </aside>
+        ) : (
+          showProperties && (
+            <aside className={`${panel} right-0 overflow-y-auto border-l border-white/10`}>
+              <Properties />
+            </aside>
+          )
         )}
 
         {dragging && (
@@ -445,6 +579,18 @@ export function EditorShell() {
       </main>
 
       {inserting && <InsertDialog onClose={() => setInserting(false)} />}
+      {sharing && cloud && (
+        <ShareDialog
+          project={{
+            id: cloud.projectId,
+            name: cloud.name,
+            shareToken: cloud.ownerShareToken,
+            latestVersion: cloud.latest,
+          }}
+          onChange={(p) => useEditor.getState().setCloudProject(p)}
+          onClose={() => setSharing(false)}
+        />
+      )}
     </div>
   );
 }

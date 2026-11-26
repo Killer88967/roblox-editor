@@ -39,3 +39,10 @@ grep -q 'oh-my-posh init' "$HOME/.zshrc" || cat >> "$HOME/.zshrc" <<'EOF'
 export PATH="$HOME/.local/bin:$PATH"
 eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/theme.omp.json)"
 EOF
+
+# Web app: a local auth secret and the database tables (Postgres runs in the db container).
+ENV_FILE=apps/web/.env.local
+if [ ! -f "$ENV_FILE" ] || ! grep -q '^BETTER_AUTH_SECRET=' "$ENV_FILE"; then
+  echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> "$ENV_FILE"
+fi
+pnpm install && pnpm --filter web db:deploy || echo "Database setup skipped; run: pnpm --filter web db:deploy"
