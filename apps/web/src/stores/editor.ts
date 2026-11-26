@@ -66,6 +66,8 @@ type EditorState = {
   activeTab: string | null;
   /** Unsaved work found from a previous visit, offered for restore. */
   restorable: { fileName: string; savedAt: number } | null;
+  /** The instance being renamed in the Explorer (null when not renaming). */
+  renaming: string | null;
   cloud: CloudContext | null;
   /** Changed since the last cloud save or load. */
   unsaved: boolean;
@@ -94,6 +96,10 @@ type EditorState = {
   setBoxSelect: (on: boolean) => void;
 
   insert: (className: string) => void;
+  /** Starts renaming an instance in the Explorer (default: the primary selection). */
+  startRename: (id?: string) => void;
+  /** Ends renaming: applies `name` if given and different, otherwise just stops. */
+  finishRename: (name: string | null) => void;
   deleteSelection: () => void;
   duplicateSelection: () => void;
   copySelection: () => void;
@@ -169,6 +175,7 @@ function fresh(editor: WasmEditor, fileName: string) {
     expanded: new Set(workspace ? [rootId, workspace] : [rootId]),
     openScripts: [],
     activeTab: null,
+    renaming: null,
     canUndo: false,
     canRedo: false,
     error: null,
@@ -347,6 +354,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     openScripts: [],
     activeTab: null,
     restorable: null,
+    renaming: null,
     cloud: null,
     unsaved: false,
     cloudSaving: false,
@@ -493,7 +501,29 @@ export const useEditor = create<EditorState>()((set, get) => {
       const [id] = get().apply([
         { type: "create", parent, class: className, name: className, properties },
       ]);
-      if (id) selectOnly([id]);
+      if (!id) return;
+      selectOnly([id]);
+      // Things like RemoteEvents and Folders are usually named right away, like
+      // "ButtonEvent". Parts usually aren't, so they skip this.
+      if (!isPart) set({ renaming: id });
+    },
+
+    startRename(id) {
+      const target = id ?? get().selection.at(-1);
+      // The DataModel itself can't be renamed.
+      if (!target || target === get().rootId || get().cloud?.readOnly) return;
+      if (!get().nodes.has(target)) return;
+      set({ renaming: target, expanded: reveal([target]) });
+    },
+
+    finishRename(name) {
+      const id = get().renaming;
+      set({ renaming: null });
+      if (!id || name === null) return;
+      const trimmed = name.trim();
+      if (trimmed && trimmed !== get().nodes.get(id)?.name) {
+        get().apply([{ type: "setName", target: id, name: trimmed }]);
+      }
     },
 
     deleteSelection() {

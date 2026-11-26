@@ -1,5 +1,9 @@
 # Cloud setup (accounts, saves, sharing, Roblox assets)
 
+Accounts are **off** by default. Set `NEXT_PUBLIC_ACCOUNTS_ENABLED=true` (in
+`apps/web/.env.local`, and in Vercel, then redeploy) to turn them on. While they're off,
+the account pages say so and the account APIs return 404 without touching the database.
+
 The editor works without any of this: `/` is the local editor. Accounts add `/dashboard`
 (your projects), `/p/<id>` (a cloud project with version history) and `/s/<token>`
 (view-only share links). All settings are environment variables; see
@@ -11,6 +15,7 @@ A rebuilt devcontainer does this for you. On an existing Codespace, run once:
 
 ```bash
 echo "BETTER_AUTH_SECRET=$(openssl rand -base64 32)" >> apps/web/.env.local
+echo "NEXT_PUBLIC_ACCOUNTS_ENABLED=true" >> apps/web/.env.local
 pnpm install
 pnpm --filter web db:deploy   # creates the tables in the devcontainer's Postgres
 pnpm dev
