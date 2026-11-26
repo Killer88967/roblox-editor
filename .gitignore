@@ -6,3 +6,7 @@ crates/**/pkg/
 dist/
 .env*
 !.env.example
+
+# Prisma client (generated on install) and local dev storage
+apps/web/src/generated/
+apps/web/.data/

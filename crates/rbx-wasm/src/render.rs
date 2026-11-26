@@ -19,7 +19,7 @@ pub struct RenderPart {
     reflectance: f32,
     /// A SpecialMesh (or legacy BlockMesh/CylinderMesh) child that reshapes the part.
     mesh: Option<MeshInfo>,
-    /// Decal/Texture children, drawn as tinted overlays on their faces (images need assets).
+    /// Decal/Texture children, drawn on their faces (images come through the asset proxy).
     decals: Vec<DecalInfo>,
 }
 
@@ -32,11 +32,18 @@ pub struct MeshInfo {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DecalInfo {
     /// NormalId item name: "Right", "Top", "Back", "Left", "Bottom", "Front".
     face: &'static str,
     color: [f32; 3],
     transparency: f32,
+    /// The image, as a content URI (e.g. "rbxassetid://123"); empty if none.
+    texture: String,
+    /// Texture only: studs per tile (U, V). None for a Decal, which stretches over the face.
+    tile: Option<[f32; 2]>,
+    /// Texture only: tile offset in studs (U, V).
+    offset: [f32; 2],
 }
 
 fn prop<'a>(inst: &'a Instance, keys: &[&str]) -> Option<&'a Variant> {
@@ -149,6 +156,22 @@ fn vec3(inst: &Instance, key: &str, default: [f32; 3]) -> [f32; 3] {
     }
 }
 
+/// A Content or ContentId property as a URI string, trying each key in turn ("" if none).
+fn content(inst: &Instance, keys: &[&str]) -> String {
+    for key in keys {
+        match inst.properties.get(&ustr(key)) {
+            Some(Variant::Content(c)) => {
+                if let Some(uri) = c.as_uri().filter(|u| !u.is_empty()) {
+                    return uri.to_owned();
+                }
+            }
+            Some(Variant::ContentId(c)) if !c.as_str().is_empty() => return c.as_str().to_owned(),
+            _ => {}
+        }
+    }
+    String::new()
+}
+
 fn float(inst: &Instance, key: &str, default: f32) -> f32 {
     match prop(inst, &[key]) {
         Some(Variant::Float32(f)) => *f,
@@ -192,10 +215,26 @@ fn decals(dom: &WeakDom, part: &Instance) -> Vec<DecalInfo> {
                 Some(Variant::Color3(c)) => [c.r, c.g, c.b],
                 _ => [1.0, 1.0, 1.0],
             };
+            let is_texture = child.class.as_str() == "Texture";
             Some(DecalInfo {
                 face,
                 color,
                 transparency: float(child, "Transparency", 0.0),
+                texture: content(child, &["TextureContent", "Texture"]),
+                tile: is_texture.then(|| {
+                    [
+                        float(child, "StudsPerTileU", 2.0),
+                        float(child, "StudsPerTileV", 2.0),
+                    ]
+                }),
+                offset: if is_texture {
+                    [
+                        float(child, "OffsetStudsU", 0.0),
+                        float(child, "OffsetStudsV", 0.0),
+                    ]
+                } else {
+                    [0.0, 0.0]
+                },
             })
         })
         .collect()
@@ -240,12 +279,14 @@ mod tests {
         assert_eq!(parts.len(), 9);
         assert!(parts.iter().all(|p| p.shape == "block"));
         assert!(parts.iter().all(|p| p.material_name == Some("Plastic")));
-        // The Baseplate has a Texture on its top face.
-        assert!(
-            parts
-                .iter()
-                .any(|p| p.decals.iter().any(|d| d.face == "Top"))
-        );
+        // The Baseplate has a Texture on its top face, with an image and tiling.
+        let texture = parts
+            .iter()
+            .flat_map(|p| p.decals.iter())
+            .find(|d| d.face == "Top")
+            .expect("baseplate texture");
+        assert!(!texture.texture.is_empty(), "texture has an image");
+        assert!(texture.tile.is_some(), "Texture has tiling");
     }
 
     #[test]

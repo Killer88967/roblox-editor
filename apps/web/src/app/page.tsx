@@ -1,5 +1,5 @@
-import { EditorShell } from "@/components/editor-shell";
+import { LocalEditor } from "@/components/local-editor";
 
 export default function Page() {
-  return <EditorShell />;
+  return <LocalEditor />;
 }

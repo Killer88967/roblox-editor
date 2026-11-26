@@ -1,0 +1,122 @@
+// Database schema. After changing it, run `pnpm --filter web db:migrate` to create a
+// migration (needs the dev Postgres from the devcontainer).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---- Better Auth (names and fields match what better-auth expects) ----
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  projects      Project[]
+  versions      ProjectVersion[]
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+// ---- Projects ----
+
+/// A place saved to the cloud. Its contents live in storage, one object per version.
+model Project {
+  id               String           @id @default(cuid())
+  name             String
+  ownerId          String
+  owner            User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  /// The latest finished version (null until the first save).
+  currentVersionId String?          @unique
+  currentVersion   ProjectVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: SetNull)
+  /// Storage key of a small preview image of the latest save.
+  thumbnailKey     String?
+  /// Anyone with this token can view the project (null = not shared).
+  shareToken       String?          @unique
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  versions         ProjectVersion[] @relation("Versions")
+
+  @@index([ownerId, updatedAt])
+  @@map("project")
+}
+
+/// One save of a project. Created as "pending" while the file uploads straight to
+/// storage, then numbered and marked "ready" once the upload is confirmed.
+model ProjectVersion {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation("Versions", fields: [projectId], references: [id], onDelete: Cascade)
+  /// 1, 2, 3… within the project; null while pending.
+  number      Int?
+  status      String   @default("pending")
+  /// Storage key of the .rbxl file.
+  fileKey     String
+  size        Int
+  message     String?
+  createdById String?
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  currentOf   Project? @relation("CurrentVersion")
+
+  @@unique([projectId, number])
+  @@index([projectId, createdAt])
+  @@map("project_version")
+}

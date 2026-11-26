@@ -4,8 +4,28 @@ import { del as idbDel, get as idbGet, set as idbSet } from "idb-keyval";
 import { loadWasm, WasmEditor } from "@/lib/wasm";
 import { viewportApi } from "@/lib/viewport-api";
 import type { JsOp, LightingInfo, NodeInfo, RenderPart, SubtreeRender, Value } from "@/lib/types";
+import type { ProjectInfo, VersionInfo } from "@/lib/cloud-types";
+import { createProject, saveVersion } from "@/lib/cloud";
+import { captureThumbnail } from "@/lib/thumbnail";
 
 export type Tool = "select" | "move" | "scale" | "rotate";
+
+/** The cloud project being edited (or viewed through a share link). */
+export type CloudContext = {
+  /** Empty for a share-link view. */
+  projectId: string;
+  name: string;
+  /** Share-link views can't change or save anything. */
+  readOnly: boolean;
+  /** For share-link views: lets the viewer load Roblox assets. */
+  shareToken: string | null;
+  /** For the owner: the project's current share link token (null = not shared). */
+  ownerShareToken: string | null;
+  /** The project's latest saved version (null before the first save). */
+  latest: VersionInfo | null;
+  /** The version that was opened, when it isn't the latest (from History). */
+  viewing: VersionInfo | null;
+};
 
 export type Snap = {
   enabled: boolean;
@@ -46,6 +66,12 @@ type EditorState = {
   activeTab: string | null;
   /** Unsaved work found from a previous visit, offered for restore. */
   restorable: { fileName: string; savedAt: number } | null;
+  cloud: CloudContext | null;
+  /** Changed since the last cloud save or load. */
+  unsaved: boolean;
+  cloudSaving: boolean;
+  /** Whether the viewport may load Roblox assets through the server (signed in or shared). */
+  assetsEnabled: boolean;
 
   openFile: (file: File) => Promise<void>;
   newPlace: () => Promise<void>;
@@ -84,12 +110,29 @@ type EditorState = {
   closeScript: (id: string) => void;
   setActiveTab: (id: string | null) => void;
 
-  checkAutosave: () => Promise<void>;
+  /** Opens place bytes (e.g. a cloud version) with an optional cloud context. */
+  openBytes: (bytes: Uint8Array, fileName: string, cloud: CloudContext | null) => Promise<void>;
+  /** Starts an empty place in a cloud project that has no saves yet. */
+  openEmptyCloud: (cloud: CloudContext) => Promise<void>;
+  /** Forgets the cloud project and the loaded place (going back to the local editor). */
+  closeCloud: () => void;
+  /** Saves the current place as a new version of the cloud project. */
+  saveToCloud: (message?: string) => Promise<boolean>;
+  /** Saves the current place as a new cloud project; returns its id. */
+  saveAsNewProject: (name: string) => Promise<string | null>;
+  setAssetsEnabled: (on: boolean) => void;
+  /** Updates the cloud context after a rename etc. */
+  setCloudProject: (project: ProjectInfo) => void;
+
+  /** Offers unsaved work for restore. `newerThan` (ms) skips work older than a cloud save. */
+  checkAutosave: (newerThan?: number) => Promise<void>;
   restoreAutosave: () => Promise<void>;
   dismissRestore: () => void;
 };
 
-const AUTOSAVE_KEY = "rbxe:autosave";
+/** Autosave slot: one for the local editor, one per cloud project. */
+const autosaveKey = (projectId?: string) =>
+  projectId ? `rbxe:autosave:${projectId}` : "rbxe:autosave";
 
 const SCRIPT_CLASSES = new Set(["Script", "LocalScript", "ModuleScript"]);
 export const isScriptClass = (className: string | undefined) =>
@@ -138,11 +181,11 @@ export const useEditor = create<EditorState>()((set, get) => {
   const scheduleAutosave = () => {
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
-      const { editor, fileName } = get();
-      if (!editor) return;
+      const { editor, fileName, cloud } = get();
+      if (!editor || cloud?.readOnly) return;
       try {
         const save: Autosave = { fileName, savedAt: Date.now(), bytes: editor.save("binary") };
-        idbSet(AUTOSAVE_KEY, save).catch(() => {});
+        idbSet(autosaveKey(cloud?.projectId), save).catch(() => {});
         // New work replaces whatever was offered for restore.
         set({ restorable: null });
       } catch {
@@ -227,13 +270,15 @@ export const useEditor = create<EditorState>()((set, get) => {
       // Close tabs for scripts that were deleted.
       openScripts: get().openScripts.filter((id) => nextNodes.has(id)),
       activeTab: get().activeTab && nextNodes.has(get().activeTab!) ? get().activeTab : null,
+      unsaved: true,
     });
     scheduleAutosave();
   };
 
   const run = <T>(fn: (editor: WasmEditor) => T, fallback: T): T => {
-    const { editor } = get();
-    if (!editor) return fallback;
+    const { editor, cloud } = get();
+    // Share-link views are look-only.
+    if (!editor || cloud?.readOnly) return fallback;
     try {
       const result = fn(editor);
       sync();
@@ -302,6 +347,10 @@ export const useEditor = create<EditorState>()((set, get) => {
     openScripts: [],
     activeTab: null,
     restorable: null,
+    cloud: null,
+    unsaved: false,
+    cloudSaving: false,
+    assetsEnabled: false,
 
     async openFile(file) {
       await loadWasm();
@@ -325,7 +374,8 @@ export const useEditor = create<EditorState>()((set, get) => {
         }
         const editor = new WasmEditor(bytes);
         get().editor?.free();
-        set(fresh(editor, file.name));
+        // Opening a file inside a cloud project replaces its contents until you save.
+        set({ ...fresh(editor, file.name), unsaved: !!get().cloud });
       } catch (e) {
         set({ error: `Couldn't open ${file.name}: ${message(e)}` });
       }
@@ -347,9 +397,12 @@ export const useEditor = create<EditorState>()((set, get) => {
         const name = `${base}.${target}`;
         download(editor.save(target === "rbxlx" ? "xml" : "binary"), name);
         set({ fileName: name });
-        // Saved to disk, so there's nothing to recover anymore.
-        clearTimeout(autosaveTimer);
-        idbDel(AUTOSAVE_KEY).catch(() => {});
+        // Saved to disk, so there's nothing to recover anymore (cloud projects keep
+        // their autosave until saved to the cloud).
+        if (!get().cloud) {
+          clearTimeout(autosaveTimer);
+          idbDel(autosaveKey()).catch(() => {});
+        }
       } catch (e) {
         set({ error: message(e) });
       }
@@ -577,25 +630,134 @@ export const useEditor = create<EditorState>()((set, get) => {
       }
     },
 
-    async checkAutosave() {
+    async openBytes(bytes, fileName, cloud) {
+      await loadWasm();
       try {
-        const saved = await idbGet<Autosave>(AUTOSAVE_KEY);
-        if (saved && !get().editor) {
-          set({ restorable: { fileName: saved.fileName, savedAt: saved.savedAt } });
-        }
+        const editor = new WasmEditor(bytes);
+        get().editor?.free();
+        set({ ...fresh(editor, fileName), cloud, unsaved: false, restorable: null });
+        if (cloud?.readOnly) set({ tool: "select" });
+      } catch (e) {
+        set({ error: `Couldn't open ${fileName}: ${message(e)}` });
+      }
+    },
+
+    async openEmptyCloud(cloud) {
+      await loadWasm();
+      get().editor?.free();
+      set({
+        ...fresh(WasmEditor.empty(), `${cloud.name}.rbxl`),
+        cloud,
+        unsaved: false,
+        restorable: null,
+      });
+    },
+
+    closeCloud() {
+      if (!get().cloud) return;
+      clearTimeout(autosaveTimer);
+      get().editor?.free();
+      set({
+        editor: null,
+        fileName: "",
+        rootId: null,
+        nodes: new Map(),
+        parts: new Map(),
+        lighting: null,
+        selection: [],
+        openScripts: [],
+        activeTab: null,
+        cloud: null,
+        unsaved: false,
+        restorable: null,
+      });
+    },
+
+    async saveToCloud(msg) {
+      const { editor, cloud, cloudSaving } = get();
+      if (!editor || !cloud || cloud.readOnly || !cloud.projectId || cloudSaving) return false;
+      set({ cloudSaving: true });
+      try {
+        const bytes = editor.save("binary");
+        const thumbnail = await captureThumbnail().catch(() => null);
+        const project = await saveVersion(cloud.projectId, bytes, thumbnail, msg);
+        set({
+          cloud: { ...cloud, name: project.name, latest: project.latestVersion, viewing: null },
+          unsaved: false,
+          cloudSaving: false,
+          fileName: `${project.name}.rbxl`,
+        });
+        clearTimeout(autosaveTimer);
+        idbDel(autosaveKey(cloud.projectId)).catch(() => {});
+        return true;
+      } catch (e) {
+        set({ cloudSaving: false, error: `Couldn't save to the cloud: ${message(e)}` });
+        return false;
+      }
+    },
+
+    async saveAsNewProject(name) {
+      const { editor } = get();
+      if (!editor) return null;
+      try {
+        const project = await createProject(name);
+        set({
+          cloud: {
+            projectId: project.id,
+            name: project.name,
+            readOnly: false,
+            shareToken: null,
+            ownerShareToken: null,
+            latest: null,
+            viewing: null,
+          },
+        });
+        return (await get().saveToCloud("First save")) ? project.id : null;
+      } catch (e) {
+        set({ error: `Couldn't create the project: ${message(e)}` });
+        return null;
+      }
+    },
+
+    setAssetsEnabled(on) {
+      if (get().assetsEnabled !== on) set({ assetsEnabled: on });
+    },
+
+    setCloudProject(project) {
+      const { cloud } = get();
+      if (!cloud || cloud.projectId !== project.id) return;
+      set({
+        cloud: {
+          ...cloud,
+          name: project.name,
+          latest: project.latestVersion,
+          ownerShareToken: project.shareToken,
+        },
+      });
+    },
+
+    async checkAutosave(newerThan) {
+      const { cloud } = get();
+      try {
+        const saved = await idbGet<Autosave>(autosaveKey(cloud?.projectId));
+        if (!saved) return;
+        // Local editor: only when nothing's open. Cloud: when it's newer than the last save.
+        const offer = cloud ? saved.savedAt > (newerThan ?? 0) : !get().editor;
+        if (offer) set({ restorable: { fileName: saved.fileName, savedAt: saved.savedAt } });
       } catch {
         // No IndexedDB (private mode etc.): nothing to restore.
       }
     },
 
     async restoreAutosave() {
+      const { cloud } = get();
       try {
-        const saved = await idbGet<Autosave>(AUTOSAVE_KEY);
+        const saved = await idbGet<Autosave>(autosaveKey(cloud?.projectId));
         if (!saved) return set({ restorable: null });
         await loadWasm();
         const editor = new WasmEditor(saved.bytes);
         get().editor?.free();
-        set({ ...fresh(editor, saved.fileName), restorable: null });
+        set({ ...fresh(editor, saved.fileName), restorable: null, unsaved: !!cloud });
       } catch (e) {
         set({ error: `Couldn't restore: ${message(e)}`, restorable: null });
       }
@@ -603,7 +765,14 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     dismissRestore() {
       set({ restorable: null });
-      idbDel(AUTOSAVE_KEY).catch(() => {});
+      idbDel(autosaveKey(get().cloud?.projectId)).catch(() => {});
     },
   };
 });
+
+/** Ctrl/Cmd+S: a new cloud version in a cloud project, otherwise a download. */
+export function quickSave() {
+  const st = useEditor.getState();
+  if (st.cloud && !st.cloud.readOnly) void st.saveToCloud();
+  else if (!st.cloud?.readOnly) st.save();
+}

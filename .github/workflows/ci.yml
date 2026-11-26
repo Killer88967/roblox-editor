@@ -15,6 +15,18 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: roblox_editor
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/roblox_editor
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,7 +60,16 @@ jobs:
           node-version: 24
           cache: pnpm
 
+      # Also generates the Prisma client (web's postinstall).
       - run: pnpm install --frozen-lockfile
+
+      # Apply the migrations to a fresh database, then fail if they don't produce exactly
+      # what prisma/schema.prisma describes (a schema change without a migration).
+      - name: Check database migrations
+        working-directory: apps/web
+        run: |
+          pnpm exec prisma migrate deploy
+          pnpm exec prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
 
       - name: Build WASM package
         run: pnpm --filter @rbxe/wasm build

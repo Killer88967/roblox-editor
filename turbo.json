@@ -4,10 +4,25 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**", "pkg/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**", "pkg/**"],
+      "env": [
+        "DATABASE_URL",
+        "BETTER_AUTH_*",
+        "AUTH_ALLOWED_HOSTS",
+        "GITHUB_CLIENT_*",
+        "DISCORD_CLIENT_*",
+        "R2_*",
+        "ROBLOX_API_KEY"
+      ]
     },
-    "dev": { "dependsOn": ["^build"], "cache": false, "persistent": true },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
     "lint": {},
-    "test": { "dependsOn": ["^build"] }
+    "test": {
+      "dependsOn": ["^build"]
+    }
   }
 }
