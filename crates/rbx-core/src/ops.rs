@@ -1,4 +1,4 @@
-use rbx_dom_weak::types::{Ref, Variant};
+use rbx_dom_weak::types::{Ref, UniqueId, Variant};
 use rbx_dom_weak::{Instance, InstanceBuilder, WeakDom, ustr};
 
 use crate::error::{CoreError, Result};
@@ -69,7 +69,10 @@ pub fn apply(dom: &mut WeakDom, graveyard: &mut WeakDom, op: Op) -> Result<(Op, 
             exists(dom, parent)?;
             let mut builder = InstanceBuilder::new(class.as_str())
                 .with_name(name)
-                .with_properties(properties.into_iter().map(|(k, v)| (ustr(&k), v)));
+                .with_properties(properties.into_iter().map(|(k, v)| (ustr(&k), v)))
+                // Every instance gets its own UniqueId (class defaults are all zeros,
+                // which would collide with the next new instance; see fresh_unique_id).
+                .with_property("UniqueId", fresh_unique_id());
             if let Some(id) = id {
                 if dom.get_by_ref(id).is_some() || graveyard.get_by_ref(id).is_some() {
                     return Err(CoreError::InvalidOp(
@@ -90,6 +93,8 @@ pub fn apply(dom: &mut WeakDom, graveyard: &mut WeakDom, op: Op) -> Result<(Op, 
                 ));
             };
             // Refs from decoding are freshly generated, so they can't collide with ours.
+            // UniqueIds are copied from the original, so give the copies new ones.
+            give_fresh_unique_ids(&mut source, root);
             source.transfer(root, dom, parent);
             Ok((Op::Delete { target: root }, Some(root)))
         }
@@ -169,4 +174,37 @@ fn not_root(dom: &WeakDom, r: Ref) -> Result<()> {
         return Err(CoreError::InvalidOp("cannot modify the root"));
     }
     exists(dom, r)
+}
+
+/// A new random UniqueId.
+///
+/// rbx_dom_weak replaces a UniqueId that collides with one already in the place by calling
+/// `UniqueId::now()`, which reads the system clock. On wasm32-unknown-unknown there is no
+/// clock, so that panics ("time not implemented on this platform") and leaves the editor
+/// unusable. Making our own ids (from the same randomness as `Ref::new()`, which works in
+/// the browser) means inserts never collide and that path never runs.
+pub(crate) fn fresh_unique_id() -> UniqueId {
+    // A Ref is 128 random bits, printed as hex.
+    let bits = u128::from_str_radix(&Ref::new().to_string(), 16).unwrap_or(1);
+    let index = bits as u32;
+    let time = (bits >> 32) as u32;
+    // Roblox keeps the random part positive.
+    let random = ((bits >> 64) as i64) & i64::MAX;
+    UniqueId::new(index, time, random.max(1))
+}
+
+/// Gives every instance in a subtree that has a UniqueId a new one.
+fn give_fresh_unique_ids(dom: &mut WeakDom, root: Ref) {
+    let mut stack = vec![root];
+    while let Some(r) = stack.pop() {
+        let Some(inst) = dom.get_by_ref_mut(r) else {
+            continue;
+        };
+        let key = ustr("UniqueId");
+        if inst.properties.contains_key(&key) {
+            inst.properties
+                .insert(key, Variant::UniqueId(fresh_unique_id()));
+        }
+        stack.extend_from_slice(inst.children());
+    }
 }

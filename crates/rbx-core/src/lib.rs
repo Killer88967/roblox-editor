@@ -11,6 +11,6 @@ pub use format::Format;
 pub use ops::Op;
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod editor_tests;
+#[cfg(test)]
+mod tests;

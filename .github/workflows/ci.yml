@@ -74,6 +74,11 @@ jobs:
       - name: Build WASM package
         run: pnpm --filter @rbxe/wasm build
 
+      # Real edits against the browser build: catches code that only fails in WASM
+      # (e.g. reading the system clock, which panics there).
+      - name: WASM smoke test
+        run: node packages/wasm/smoke-test.mjs
+
       # `next typegen` generates route types (e.g. LayoutProps) that tsc needs.
       - name: Typecheck web app
         run: pnpm --filter web exec next typegen && pnpm --filter web exec tsc --noEmit
