@@ -179,3 +179,53 @@ fn paste_rejects_multiple_roots() {
         .is_err()
     );
 }
+
+fn unique_id(ed: &Editor, r: Ref) -> rbx_dom_weak::types::UniqueId {
+    match ed
+        .dom()
+        .get_by_ref(r)
+        .unwrap()
+        .properties
+        .get(&rbx_dom_weak::ustr("UniqueId"))
+    {
+        Some(Variant::UniqueId(id)) => *id,
+        other => panic!("expected a UniqueId, got {other:?}"),
+    }
+}
+
+/// New and pasted instances get their own UniqueIds, so rbx_dom_weak never has to make
+/// one with the system clock (which panics in the browser).
+#[test]
+fn inserts_get_fresh_unique_ids() {
+    let (mut ed, ws) = setup();
+    // Creating with the class default (an all-zero UniqueId), like the web app does.
+    let nil = || {
+        vec![(
+            "UniqueId".to_string(),
+            Variant::UniqueId(rbx_dom_weak::types::UniqueId::nil()),
+        )]
+    };
+    let mut make = |name: &str| {
+        ed.apply(vec![Op::Create {
+            parent: ws,
+            class: "RemoteEvent".into(),
+            name: name.into(),
+            properties: nil(),
+            id: None,
+        }])
+        .unwrap()[0]
+    };
+    let a = make("A");
+    let b = make("B");
+    assert!(!unique_id(&ed, a).is_nil());
+    assert_ne!(unique_id(&ed, a), unique_id(&ed, b));
+
+    let bytes = ed.document().save_refs(&[a], Format::Binary).unwrap();
+    let copy = ed
+        .apply(vec![Op::Paste {
+            parent: ws,
+            model: bytes,
+        }])
+        .unwrap()[0];
+    assert_ne!(unique_id(&ed, copy), unique_id(&ed, a));
+}
