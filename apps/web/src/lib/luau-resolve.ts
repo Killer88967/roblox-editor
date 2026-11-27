@@ -71,7 +71,8 @@ export type Target =
   | { kind: "static"; name: string }
   | { kind: "enums" }
   | { kind: "enum"; name: string }
-  | { kind: "table"; name: string; fields: Field[]; an: Analysis };
+  /** `name` is for display (`Config.Theme`); `key` is its path inside `an` (`M.Theme`). */
+  | { kind: "table"; name: string; key: string; fields: Field[]; an: Analysis };
 
 type Ctx = { tree: Tree; api: Api; an: Analysis; at: number };
 
@@ -108,14 +109,22 @@ function moduleTable(ctx: Ctx, id: string): Target | null {
   const source = ctx.tree.source?.(id);
   if (!node || node.class !== "ModuleScript" || source === undefined) return null;
   const an = analyze(source);
-  return an.exports ? { kind: "table", name: node.name, fields: an.exports, an } : null;
+  return an.exports
+    ? { kind: "table", name: node.name, key: an.exportsKey ?? node.name, fields: an.exports, an }
+    : null;
 }
 
 /** Works out a variable's value from where it was assigned or declared. */
-function fromSource(ctx: Ctx, name: string, src: Source | undefined, depth: number): Target | null {
+function fromSource(
+  ctx: Ctx,
+  name: string,
+  src: Source | undefined,
+  depth: number,
+  key = name,
+): Target | null {
   const table = (): Target | null => {
-    const fields = fieldsOf(ctx.an, name);
-    return fields.length ? { kind: "table", name, fields, an: ctx.an } : null;
+    const fields = fieldsOf(ctx.an, key);
+    return fields.length ? { kind: "table", name, key, fields, an: ctx.an } : null;
   };
   if (!src) return table();
   switch (src.k) {
@@ -197,6 +206,7 @@ function step(ctx: Ctx, target: Target, s: Step, depth: number): Target | null {
       `${target.name}.${f.name}`,
       { k: "rhs", ...f.rhs },
       depth + 1,
+      `${target.key}.${f.name}`,
     );
   }
 

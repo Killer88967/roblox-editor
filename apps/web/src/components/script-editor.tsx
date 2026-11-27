@@ -29,16 +29,23 @@ export function ScriptEditor({ id }: { id: string }) {
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   /** The last source we committed or loaded, to tell our edits from outside ones. */
   const committed = useRef<string>("");
+  /**
+   * The editor's current text, kept up to date on every change. Saving uses this rather
+   * than asking Monaco: when a tab closes, Monaco may already have thrown its model away
+   * and would report "", which used to save the script as empty.
+   */
+  const latest = useRef<string | null>(null);
   const [status, setStatus] = useState({ line: 1, column: 1, errors: 0, warnings: 0 });
 
   const initial = useMemo(() => readSource(id), [id]);
 
   const commit = () => {
     clearTimeout(timer.current);
-    const code = codeRef.current;
-    if (!code) return;
-    const text = code.getValue();
-    if (text === committed.current) return;
+    const text = latest.current;
+    // Not loaded yet, or nothing changed.
+    if (text === null || text === committed.current) return;
+    // The script was deleted while open: nothing to save to.
+    if (!useEditor.getState().nodes.has(id)) return;
     committed.current = text;
     useEditor
       .getState()
@@ -53,6 +60,18 @@ export function ScriptEditor({ id }: { id: string }) {
     commitRef.current = commit;
   });
   useEffect(() => () => commitRef.current(), []);
+  // Also save when the page is hidden (switching apps or tabs on iPad, closing the browser).
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === "hidden") commitRef.current();
+    };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, []);
   // Undo the diagnostics/auto-end hookup when the editor goes away.
   const detach = useRef<() => void>(undefined);
   useEffect(() => () => detach.current?.(), []);
@@ -64,6 +83,7 @@ export function ScriptEditor({ id }: { id: string }) {
     const source = readSource(id);
     if (source === committed.current) return;
     committed.current = source;
+    latest.current = source;
     const model = code.getModel();
     if (model && model.getValue() !== source) {
       code.pushUndoStop();
@@ -79,6 +99,7 @@ export function ScriptEditor({ id }: { id: string }) {
   const onMount: OnMount = (code, monaco: Monaco) => {
     codeRef.current = code;
     committed.current = code.getValue();
+    latest.current = committed.current;
     code.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       commit();
       quickSave();
@@ -130,7 +151,8 @@ export function ScriptEditor({ id }: { id: string }) {
             registerProviders(monaco);
           }}
           onMount={onMount}
-          onChange={() => {
+          onChange={(value) => {
+            latest.current = value ?? "";
             clearTimeout(timer.current);
             timer.current = setTimeout(() => commitRef.current(), COMMIT_DELAY);
           }}
