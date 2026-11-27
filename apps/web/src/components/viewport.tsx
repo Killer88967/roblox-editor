@@ -9,6 +9,7 @@ import { viewportApi } from "@/lib/viewport-api";
 import { materialLook } from "@/lib/materials";
 import { useAssetTexture } from "@/lib/asset-textures";
 import { registerThumbnailCapture } from "@/lib/thumbnail";
+import { GuiOverlay } from "./gui-overlay";
 import type { DecalInfo, JsOp, NodeInfo, RenderPart, Value } from "@/lib/types";
 import { SceneLighting } from "./scene-lighting";
 
@@ -709,6 +710,7 @@ export function Viewport() {
         <BoxSelect onRect={setRect} />
         <ThumbnailCapture />
       </Canvas>
+      <GuiOverlay />
       {rect && (
         <div
           className="pointer-events-none absolute border border-blue-400 bg-blue-400/15"

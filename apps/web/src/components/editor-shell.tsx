@@ -511,6 +511,14 @@ export function EditorShell() {
           >
             Box
           </button>
+          <button
+            type="button"
+            title="Show StarterGui's ScreenGuis over the 3D view"
+            className={toggleBtn(s.showGui)}
+            onClick={() => s.setShowGui(!s.showGui)}
+          >
+            UI
+          </button>
         </div>
       )}
 

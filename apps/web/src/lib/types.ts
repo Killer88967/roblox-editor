@@ -15,6 +15,12 @@ export type Value =
   | { type: "UDim2"; value: { x: UDim; y: UDim } }
   /** Asset URI like "rbxassetid://123" ("" = none). */
   | { type: "Content" | "ContentId"; value: string }
+  /** FontFace: family asset (e.g. "rbxasset://fonts/families/GothamSSm.json"), weight 100–900. */
+  | { type: "Font"; value: { family: string; weight: number; italic: boolean } }
+  | { type: "Rect"; value: { min: [number, number]; max: [number, number] } }
+  | { type: "NumberRange"; value: { min: number; max: number } }
+  | { type: "ColorSequence"; value: { time: number; color: V3 }[] }
+  | { type: "NumberSequence"; value: { time: number; value: number; envelope: number }[] }
   | { type: "Unsupported"; value: { ty: string; text: string } };
 
 export type NodeInfo = {
@@ -126,6 +132,20 @@ export function formatValue(v: Value): string {
     case "Content":
     case "ContentId":
       return v.value;
+    case "Font": {
+      const family = v.value.family.match(/([^/]+?)(\.json)?$/)?.[1] ?? v.value.family;
+      return `${family}, ${v.value.weight}${v.value.italic ? ", italic" : ""}`;
+    }
+    case "Rect":
+      return `${v.value.min.map(round).join(", ")}, ${v.value.max.map(round).join(", ")}`;
+    case "NumberRange":
+      return `${round(v.value.min)} – ${round(v.value.max)}`;
+    case "ColorSequence":
+      return v.value
+        .map((k) => `${round(k.time)}: ${k.color.map((n) => Math.round(n * 255)).join(" ")}`)
+        .join(" → ");
+    case "NumberSequence":
+      return v.value.map((k) => `${round(k.time)}: ${round(k.value)}`).join(" → ");
     case "Unsupported":
       return v.value.text;
     default:
