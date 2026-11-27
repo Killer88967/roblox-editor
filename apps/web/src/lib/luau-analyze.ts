@@ -90,6 +90,8 @@ export type Analysis = {
   typeNames: Set<string>;
   /** What the module returns: a table's fields, or null. */
   exports: Field[] | null;
+  /** The `fields` key of what the module returns (`M` for `return M`), for nested fields. */
+  exportsKey: string | null;
   byName: Map<string, Decl[]>;
 };
 
@@ -904,8 +906,11 @@ function index(code: string, masked: string, toks: Tok[], b: ReturnType<typeof b
     });
   };
 
-  /** Fields in a table constructor `{ a = 1, b = function() end }` at token o. */
-  const constructorFields = (o: number): Field[] => {
+  /**
+   * Fields in a table constructor `{ a = 1, b = function() end }` at token o. With a key
+   * (the table's path, e.g. `M`), nested constructors are recorded too, under `M.a` etc.
+   */
+  const constructorFields = (o: number, key?: string): Field[] => {
     const out: Field[] = [];
     if (!isOp(o, "{") || match[o] < 0) return out;
     for (let k = o + 1; k < match[o]; k++) {
@@ -917,6 +922,10 @@ function index(code: string, masked: string, toks: Tok[], b: ReturnType<typeof b
       if (value) {
         f.rhs = { text: text(value.a, value.z), at: toks[k].s };
         if (isKw(value.a, "function")) f.params = readParams(value.a + 1);
+        if (key && isOp(value.a, "{") && match[value.a] === value.z) {
+          const inner = `${key}.${f.name}`;
+          for (const nested of constructorFields(value.a, inner)) addField(inner, nested);
+        }
       }
       out.push(f);
     }
@@ -1004,7 +1013,7 @@ function index(code: string, masked: string, toks: Tok[], b: ReturnType<typeof b
         });
         if (v && isKw(v.a, "function")) d.params = readParams(v.a + 1);
         if (v && isOp(v.a, "{") && match[v.a] === v.z) {
-          for (const f of constructorFields(v.a)) addField(nameTok.v, f);
+          for (const f of constructorFields(v.a, nameTok.v)) addField(nameTok.v, f);
         }
       });
       i = k - 1;
@@ -1040,10 +1049,12 @@ function index(code: string, masked: string, toks: Tok[], b: ReturnType<typeof b
           }
           declareParams(i, k, params);
         } else {
-          const table = toks[parts[0]].v;
-          if (parts.length === 2) {
-            addField(table, { name: nameTok.v, method, params, s: nameTok.s, e: nameTok.e });
-          }
+          // function M.a.b() is field b of M.a.
+          const table = parts
+            .slice(0, -1)
+            .map((p) => toks[p].v)
+            .join(".");
+          addField(table, { name: nameTok.v, method, params, s: nameTok.s, e: nameTok.e });
           declareParams(i, k, params, method ? { self: table } : undefined);
         }
         i = k - 1;
@@ -1179,20 +1190,35 @@ function index(code: string, masked: string, toks: Tok[], b: ReturnType<typeof b
         });
         if (v && isKw(v.a, "function")) d.params = readParams(v.a + 1);
         if (v && isOp(v.a, "{") && match[v.a] === v.z) {
-          for (const f of constructorFields(v.a)) addField(t.v, f);
+          for (const f of constructorFields(v.a, t.v)) addField(t.v, f);
         }
       }
       continue;
     }
-    if (statementStart && isOp(i + 1, ".") && toks[i + 2]?.k === "name" && isOp(i + 3, "=")) {
-      const { items } = readExprList(i + 4);
-      const v = items[0];
-      const f: Field = { name: toks[i + 2].v, method: false, s: toks[i + 2].s, e: toks[i + 2].e };
-      if (v) {
-        f.rhs = { text: text(v.a, v.z), at: t.s };
-        if (isKw(v.a, "function")) f.params = readParams(v.a + 1);
+    // M.a = …, M.a.b = …: a field of M / M.a.
+    if (statementStart && isOp(i + 1, ".")) {
+      const path = [t.v];
+      let k = i + 1;
+      while (isOp(k, ".") && toks[k + 1]?.k === "name") {
+        path.push(toks[k + 1].v);
+        k += 2;
       }
-      addField(t.v, f);
+      if (path.length > 1 && isOp(k, "=")) {
+        const nameTok = toks[k - 1];
+        const table = path.slice(0, -1).join(".");
+        const { items } = readExprList(k + 1);
+        const v = items[0];
+        const f: Field = { name: nameTok.v, method: false, s: nameTok.s, e: nameTok.e };
+        if (v) {
+          f.rhs = { text: text(v.a, v.z), at: t.s };
+          if (isKw(v.a, "function")) f.params = readParams(v.a + 1);
+          if (isOp(v.a, "{") && match[v.a] === v.z) {
+            const inner = `${table}.${f.name}`;
+            for (const nested of constructorFields(v.a, inner)) addField(inner, nested);
+          }
+        }
+        addField(table, f);
+      }
     }
 
     // Names after `:`/`::`/`->` are type annotations, not variables.
@@ -1214,11 +1240,17 @@ function index(code: string, masked: string, toks: Tok[], b: ReturnType<typeof b
 
   // What the module returns: `return M` or `return { … }` at the top level.
   let exports: Field[] | null = null;
+  let exportsKey: string | null = null;
   for (let i = N - 1; i >= 0; i--) {
     if (!isKw(i, "return") || top[i] !== -1) continue;
     const v = toks[i + 1];
-    if (v?.k === "name") exports = fields.get(v.v) ?? [];
-    else if (isOp(i + 1, "{")) exports = constructorFields(i + 1);
+    if (v?.k === "name") {
+      exportsKey = v.v;
+      exports = fields.get(v.v) ?? [];
+    } else if (isOp(i + 1, "{")) {
+      exportsKey = "<return>";
+      exports = constructorFields(i + 1, exportsKey);
+    }
     break;
   }
 
@@ -1231,7 +1263,7 @@ function index(code: string, masked: string, toks: Tok[], b: ReturnType<typeof b
     list.push(d);
     byName.set(d.name, list);
   }
-  return { decls, assigns, fields, refs: finalRefs, typeNames, exports, byName };
+  return { decls, assigns, fields, refs: finalRefs, typeNames, exports, exportsKey, byName };
 }
 
 /**
