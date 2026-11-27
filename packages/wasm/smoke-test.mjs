@@ -26,8 +26,8 @@ for (const [label, editor] of [
   editor.undo();
   editor.redo();
   // GUI property types come through as real values (not "Unsupported").
-  const label = create("TextLabel");
-  const types = Object.fromEntries(editor.properties(label).map((p) => [p.key, p.value.type]));
+  const textLabel = create("TextLabel");
+  const types = Object.fromEntries(editor.properties(textLabel).map((p) => [p.key, p.value.type]));
   if (types.FontFace !== "Font") throw new Error(`FontFace came through as ${types.FontFace}`);
   const gradient = create("UIGradient");
   const color = editor.properties(gradient).find((p) => p.key === "Color")?.value;
