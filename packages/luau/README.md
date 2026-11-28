@@ -18,7 +18,7 @@ The JS side of the protocol (answering host calls against the place) lives in
 Needs clang/lld 18 and Ubuntu's wasm32 packages:
 
 ```sh
-sudo apt-get install clang lld wasi-libc libc++-18-dev-wasm32 libclang-rt-18-dev-wasm32
+sudo apt-get install clang-18 lld-18 wasi-libc libc++-18-dev-wasm32 libc++abi-18-dev-wasm32 libclang-rt-18-dev-wasm32
 pnpm --filter @rbxe/luau build:wasm
 pnpm --filter @rbxe/luau test
 ```

@@ -44,7 +44,7 @@ jobs:
       - name: Install clang
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends clang llvm lld wasi-libc \
+          sudo apt-get install -y --no-install-recommends clang llvm clang-18 lld-18 wasi-libc \
             libc++-18-dev-wasm32 libc++abi-18-dev-wasm32 libclang-rt-18-dev-wasm32
 
       - uses: taiki-e/install-action@v2

@@ -3,7 +3,8 @@
 # runtime (runtime/*.luau), for the browser.
 #
 # Needs clang/lld 18 and Ubuntu's wasm32 libc and libc++ packages:
-#   sudo apt-get install clang lld wasi-libc libc++-18-dev-wasm32 libclang-rt-18-dev-wasm32
+#   sudo apt-get install clang-18 lld-18 wasi-libc libc++-18-dev-wasm32 libc++abi-18-dev-wasm32 \
+#     libclang-rt-18-dev-wasm32
 #
 # Ubuntu's libc++abi is built without exceptions, which Luau's parser and compiler use, so
 # the C++ ABI runtime is built here from LLVM's sources with WebAssembly exceptions.
@@ -16,8 +17,14 @@ here=$(cd "$(dirname "$0")" && pwd)
 build="$here/.build"
 mkdir -p "$build/obj"
 
-CLANG=$(command -v clang-18 || command -v clang)
-CLANGXX=$(command -v clang++-18 || command -v clang++)
+# Pinned to clang 18: it has to match Ubuntu's wasm32 libraries, and it keeps the output
+# byte-for-byte the same everywhere (the built file is committed).
+CLANG=$(command -v clang-18 || true)
+CLANGXX=$(command -v clang++-18 || true)
+if [ -z "$CLANG" ] || [ -z "$CLANGXX" ] || ! command -v wasm-ld-18 >/dev/null; then
+  echo "build.sh needs clang-18 and lld-18 (apt-get install clang-18 lld-18 ...)" >&2
+  exit 1
+fi
 
 if [ ! -d "$build/luau-$LUAU_VERSION" ]; then
   git -c advice.detachedHead=false clone -q --depth 1 --branch "$LUAU_VERSION" https://github.com/luau-lang/luau.git \
