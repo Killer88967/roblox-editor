@@ -66,6 +66,9 @@ type EditorState = {
   activeTab: string | null;
   /** Unsaved work found from a previous visit, offered for restore. */
   restorable: { fileName: string; savedAt: number } | null;
+  /** Whether StarterGui's ScreenGuis are drawn over the 3D view (Studio's "UI" toggle). */
+  showGui: boolean;
+  setShowGui: (on: boolean) => void;
   /** The instance being renamed in the Explorer (null when not renaming). */
   renaming: string | null;
   cloud: CloudContext | null;
@@ -354,6 +357,8 @@ export const useEditor = create<EditorState>()((set, get) => {
     openScripts: [],
     activeTab: null,
     restorable: null,
+    showGui: true,
+    setShowGui: (showGui) => set({ showGui }),
     renaming: null,
     cloud: null,
     unsaved: false,

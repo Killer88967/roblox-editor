@@ -25,6 +25,14 @@ for (const [label, editor] of [
   editor.apply([{ type: "paste", parent: workspace, model: editor.export([part], "binary") }]);
   editor.undo();
   editor.redo();
+  // GUI property types come through as real values (not "Unsupported").
+  const textLabel = create("TextLabel");
+  const types = Object.fromEntries(editor.properties(textLabel).map((p) => [p.key, p.value.type]));
+  if (types.FontFace !== "Font") throw new Error(`FontFace came through as ${types.FontFace}`);
+  const gradient = create("UIGradient");
+  const color = editor.properties(gradient).find((p) => p.key === "Color")?.value;
+  if (color?.type !== "ColorSequence") throw new Error(`UIGradient.Color came through as ${color?.type}`);
+  editor.apply([{ type: "setProperty", target: gradient, key: "Color", value: color }]);
   for (const id of editor.takeDirty()) editor.renderPart(id);
   editor.save("binary");
   console.log(`ok: ${label}`);
