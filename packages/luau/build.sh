@@ -101,6 +101,8 @@ for src in "$luau"/Common/src/*.cpp "$luau"/Ast/src/*.cpp "$luau"/Bytecode/src/*
   compile "$src" "$CLANGXX" "${luau_flags[@]}"
 done
 compile "$here/src/bridge.cpp" "$CLANGXX" "${luau_flags[@]}"
+compile "$build/runtime.cpp" "$CLANGXX" -std=c++17
+
 # The type checker. src/shim has single-threaded <mutex> and <condition_variable>: this
 # libc++ is built without threads.
 analysis_flags=("${luau_flags[@]}" -D_WASI_EMULATED_MMAN -I"$here/src/shim"
