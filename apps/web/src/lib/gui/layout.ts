@@ -616,3 +616,21 @@ export function layoutScreens(
   walk(containerId);
   return out.sort((a, b) => a.displayOrder - b.displayOrder);
 }
+
+export type AbsoluteRect = { x: number; y: number; w: number; h: number; rotation: number };
+
+/** Every GUI object's rect in screen pixels (below the top bar), for AbsolutePosition etc. */
+export function absoluteRects(screens: GuiScreen[]) {
+  const out = new Map<string, AbsoluteRect>();
+  const walk = (els: GuiElement[], ox: number, oy: number, rotation: number) => {
+    for (const el of els) {
+      const x = ox + el.x;
+      const y = oy + el.y;
+      const rot = rotation + (el.rotation || 0);
+      out.set(el.id, { x, y, w: el.w, h: el.h, rotation: rot });
+      walk(el.children, x, y, rot);
+    }
+  };
+  for (const s of screens) walk(s.elements, 0, s.top - GUI_INSET, 0);
+  return out;
+}

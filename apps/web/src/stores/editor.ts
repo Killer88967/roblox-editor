@@ -77,6 +77,11 @@ type EditorState = {
   cloudSaving: boolean;
   /** Whether the viewport may load Roblox assets through the server (signed in or shared). */
   assetsEnabled: boolean;
+  /**
+   * Play mode: `editor` is a throwaway copy of the place that scripts change (Explorer,
+   * Properties and the viewport show it, like Studio). Stopping brings the place back.
+   */
+  playing: boolean;
 
   openFile: (file: File) => Promise<void>;
   newPlace: () => Promise<void>;
@@ -119,6 +124,13 @@ type EditorState = {
   closeScript: (id: string) => void;
   setActiveTab: (id: string | null) => void;
 
+  /** Swaps in the play copy of the place (see stores/play.ts). */
+  enterPlay: (copy: WasmEditor) => void;
+  /** Ends play mode and brings back the place as it was. */
+  exitPlay: () => void;
+  /** Pulls changes out of the play copy (the play loop calls this after scripts run). */
+  refresh: () => void;
+
   /** Opens place bytes (e.g. a cloud version) with an optional cloud context. */
   openBytes: (bytes: Uint8Array, fileName: string, cloud: CloudContext | null) => Promise<void>;
   /** Starts an empty place in a cloud project that has no saves yet. */
@@ -149,6 +161,18 @@ export const isScriptClass = (className: string | undefined) =>
 const AUTOSAVE_DELAY = 1500;
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** Called when play mode ends for any reason (Stop, opening another place, ...). */
+let onPlayExit: (() => void) | null = null;
+export function setPlayExitHandler(fn: (() => void) | null) {
+  onPlayExit = fn;
+}
+
+/** The place being edited, kept aside while playing. */
+type EditStash = Pick<
+  EditorState,
+  "editor" | "rootId" | "nodes" | "parts" | "lighting" | "canUndo" | "canRedo" | "unsaved"
+> & { editor: WasmEditor };
 
 function download(bytes: Uint8Array, fileName: string) {
   const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)]));
@@ -187,11 +211,15 @@ function fresh(editor: WasmEditor, fileName: string) {
 
 export const useEditor = create<EditorState>()((set, get) => {
   let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let stash: EditStash | null = null;
+  /** The place being edited, even while playing (saves never include play changes). */
+  const editEditor = () => stash?.editor ?? get().editor;
 
   const scheduleAutosave = () => {
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
-      const { editor, fileName, cloud } = get();
+      const { fileName, cloud } = get();
+      const editor = editEditor();
       if (!editor || cloud?.readOnly) return;
       try {
         const save: Autosave = { fileName, savedAt: Date.now(), bytes: editor.save("binary") };
@@ -280,8 +308,10 @@ export const useEditor = create<EditorState>()((set, get) => {
       // Close tabs for scripts that were deleted.
       openScripts: get().openScripts.filter((id) => nextNodes.has(id)),
       activeTab: get().activeTab && nextNodes.has(get().activeTab!) ? get().activeTab : null,
-      unsaved: true,
     });
+    // Play changes are thrown away, so they don't count as unsaved work.
+    if (get().playing) return;
+    set({ unsaved: true });
     scheduleAutosave();
   };
 
@@ -364,8 +394,10 @@ export const useEditor = create<EditorState>()((set, get) => {
     unsaved: false,
     cloudSaving: false,
     assetsEnabled: false,
+    playing: false,
 
     async openFile(file) {
+      get().exitPlay();
       await loadWasm();
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
@@ -395,13 +427,15 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     async newPlace() {
+      get().exitPlay();
       await loadWasm();
       get().editor?.free();
       set(fresh(WasmEditor.empty(), "Untitled.rbxl"));
     },
 
     save(ext) {
-      const { editor, fileName } = get();
+      const { fileName } = get();
+      const editor = editEditor();
       if (!editor) return;
       try {
         const current = /\.rbxlx$/i.test(fileName) ? "rbxlx" : "rbxl";
@@ -651,7 +685,8 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     exportRojo() {
-      const { editor, fileName } = get();
+      const { fileName } = get();
+      const editor = editEditor();
       if (!editor) return;
       try {
         const base = fileName.replace(/\.rbx[lm]x?$/i, "") || "place";
@@ -666,6 +701,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     async openBytes(bytes, fileName, cloud) {
+      get().exitPlay();
       await loadWasm();
       try {
         const editor = new WasmEditor(bytes);
@@ -678,6 +714,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     async openEmptyCloud(cloud) {
+      get().exitPlay();
       await loadWasm();
       get().editor?.free();
       set({
@@ -690,6 +727,7 @@ export const useEditor = create<EditorState>()((set, get) => {
 
     closeCloud() {
       if (!get().cloud) return;
+      get().exitPlay();
       clearTimeout(autosaveTimer);
       get().editor?.free();
       set({
@@ -709,7 +747,8 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     async saveToCloud(msg) {
-      const { editor, cloud, cloudSaving } = get();
+      const { cloud, cloudSaving } = get();
+      const editor = editEditor();
       if (!editor || !cloud || cloud.readOnly || !cloud.projectId || cloudSaving) return false;
       set({ cloudSaving: true });
       try {
@@ -732,7 +771,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     async saveAsNewProject(name) {
-      const { editor } = get();
+      const editor = editEditor();
       if (!editor) return null;
       try {
         const project = await createProject(name);
@@ -785,6 +824,7 @@ export const useEditor = create<EditorState>()((set, get) => {
     },
 
     async restoreAutosave() {
+      get().exitPlay();
       const { cloud } = get();
       try {
         const saved = await idbGet<Autosave>(autosaveKey(cloud?.projectId));
@@ -796,6 +836,55 @@ export const useEditor = create<EditorState>()((set, get) => {
       } catch (e) {
         set({ error: `Couldn't restore: ${message(e)}`, restorable: null });
       }
+    },
+
+    enterPlay(copy) {
+      const s = get();
+      if (!s.editor || s.playing) return;
+      stash = {
+        editor: s.editor,
+        rootId: s.rootId,
+        nodes: s.nodes,
+        parts: s.parts,
+        lighting: s.lighting,
+        canUndo: s.canUndo,
+        canRedo: s.canRedo,
+        unsaved: s.unsaved,
+      };
+      // Same ids as the place, so the selection and open scripts carry over.
+      const view = fresh(copy, s.fileName);
+      set({
+        editor: copy,
+        rootId: view.rootId,
+        nodes: view.nodes,
+        parts: view.parts,
+        lighting: view.lighting,
+        canUndo: false,
+        canRedo: false,
+        renaming: null,
+        playing: true,
+        selection: s.selection.filter((id) => view.nodes.has(id)),
+      });
+    },
+
+    exitPlay() {
+      if (!stash) return;
+      const back = stash;
+      stash = null;
+      const { selection, openScripts, activeTab } = get();
+      set({
+        ...back,
+        playing: false,
+        renaming: null,
+        selection: selection.filter((id) => back.nodes.has(id)),
+        openScripts: openScripts.filter((id) => back.nodes.has(id)),
+        activeTab: activeTab && back.nodes.has(activeTab) ? activeTab : null,
+      });
+      onPlayExit?.();
+    },
+
+    refresh() {
+      if (get().playing) sync();
     },
 
     dismissRestore() {

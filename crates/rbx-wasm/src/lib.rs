@@ -1,5 +1,6 @@
 mod js_ops;
 mod lighting;
+mod play;
 mod reflection;
 mod render;
 mod rojo;
@@ -25,7 +26,7 @@ pub(crate) fn parse_ref(s: &str) -> Result<Ref, String> {
     s.parse::<Ref>().map_err(|_| format!("invalid ref: {s}"))
 }
 
-fn js_err(e: impl std::fmt::Display) -> JsError {
+pub(crate) fn js_err(e: impl std::fmt::Display) -> JsError {
     JsError::new(&e.to_string())
 }
 
@@ -63,9 +64,9 @@ struct PropertyInfo {
 
 #[wasm_bindgen]
 pub struct WasmEditor {
-    inner: Editor,
+    pub(crate) inner: Editor,
     /// Problems found while importing (e.g. skipped Rojo files).
-    warnings: Vec<String>,
+    pub(crate) warnings: Vec<String>,
 }
 
 #[wasm_bindgen]

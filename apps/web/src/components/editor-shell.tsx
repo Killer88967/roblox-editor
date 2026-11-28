@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { quickSave, useEditor, type Tool } from "@/stores/editor";
+import { usePlay } from "@/stores/play";
 import { useAccountSession } from "@/lib/auth-client";
 import { ACCOUNTS_ENABLED } from "@/lib/features";
 import { AccountMenu } from "./account-menu";
@@ -13,6 +14,7 @@ import { HistoryPanel } from "./history-panel";
 import { ShareDialog } from "./share-dialog";
 import { btn, primaryBtn } from "./ui";
 import { InsertDialog } from "./insert-dialog";
+import { OutputPanel } from "./output-panel";
 import { Properties } from "./properties";
 import { Viewport } from "./viewport";
 
@@ -173,6 +175,8 @@ function NumberInput({
 
 export function EditorShell() {
   const s = useEditor();
+  const playStatus = usePlay((p) => p.status);
+  const showOutput = usePlay((p) => p.showOutput);
   const wide = useWideScreen();
   // null = follow screen size: panels open on wide screens, closed on narrow ones.
   const [explorerOverride, setExplorerOverride] = useState<boolean | null>(null);
@@ -242,6 +246,8 @@ export function EditorShell() {
       if (target?.closest("input, textarea, select, [contenteditable], .monaco-editor")) return;
       const st = useEditor.getState();
       const mod = e.metaKey || e.ctrlKey;
+      // While playing, plain keys are game input (UserInputService), not shortcuts.
+      if (st.playing && !mod) return;
       const key = e.key.toLowerCase();
       const run = (fn: () => void) => {
         e.preventDefault();
@@ -405,6 +411,34 @@ export function EditorShell() {
 
       {s.editor && !readOnly && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-2 py-1.5">
+          {playStatus === "idle" ? (
+            <button
+              type="button"
+              title="Run the place's Scripts and LocalScripts on a copy of it"
+              className="rounded bg-green-700/80 px-3 py-1.5 text-sm font-medium hover:bg-green-600"
+              onClick={() => void usePlay.getState().start()}
+            >
+              ▶ Play
+            </button>
+          ) : (
+            <button
+              type="button"
+              title="Stop and go back to the place as it was"
+              className="rounded bg-red-700/80 px-3 py-1.5 text-sm font-medium hover:bg-red-600 disabled:opacity-50"
+              disabled={playStatus === "starting"}
+              onClick={() => usePlay.getState().stop()}
+            >
+              ■ Stop
+            </button>
+          )}
+          <button
+            type="button"
+            title="Prints, warnings and errors from your scripts"
+            className={toggleBtn(showOutput)}
+            onClick={() => usePlay.getState().setShowOutput(!showOutput)}
+          >
+            Output
+          </button>
           <div className="flex overflow-hidden rounded">
             {TOOLS.map((t) => (
               <button
@@ -522,6 +556,12 @@ export function EditorShell() {
         </div>
       )}
 
+      {s.playing && (
+        <div className="bg-green-900/40 px-3 py-1.5 text-sm text-green-100">
+          Playing. Changes made now are thrown away when you stop.
+        </div>
+      )}
+
       {s.restorable && (
         <div className="flex flex-wrap items-center gap-2 bg-blue-900/50 px-3 py-2 text-sm">
           <span>
@@ -580,6 +620,7 @@ export function EditorShell() {
               </div>
             )}
           </div>
+          {showOutput && <OutputPanel />}
         </section>
         {showHistory && editable ? (
           <aside className={`${panel} right-0 overflow-hidden border-l border-white/10`}>

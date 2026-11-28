@@ -35,5 +35,36 @@ for (const [label, editor] of [
   editor.apply([{ type: "setProperty", target: gradient, key: "Color", value: color }]);
   for (const id of editor.takeDirty()) editor.renderPart(id);
   editor.save("binary");
+
+  // Play mode: a copy with the same ids that changes independently.
+  const copy = editor.fork();
+  if (copy.node(part)?.name !== "Part") throw new Error("fork() didn't keep instance ids");
+  copy.apply([{ type: "setProperty", target: part, key: "Transparency", value: { type: "Float32", value: 1 } }]);
+  copy.clearHistory();
+  if (copy.canUndo()) throw new Error("clearHistory() kept undo history");
+  if (copy.property(part, "Transparency")?.value !== 1) throw new Error("property() on the copy");
+  if (editor.property(part, "Transparency")?.value !== 0.5) throw new Error("the copy changed the place");
+  if (editor.property(part, "Nope") !== undefined) throw new Error("property() for a missing key");
+  copy.attributes(part);
+  copy.tags(part);
+  copy.free();
   console.log(`ok: ${label}`);
 }
+
+// Reflection helpers for play mode.
+const chain = WasmEditor.classChain("Part");
+if (chain[0] !== "Part" || !chain.includes("BasePart") || chain.at(-1) !== "Instance") {
+  throw new Error(`classChain("Part") = ${chain}`);
+}
+if (WasmEditor.classChain("NotAClass").length !== 0) throw new Error("classChain for unknown classes");
+const material = WasmEditor.propertyMeta("Part", "Material");
+if (material?.enum !== "Material" || material?.default?.type !== "Enum") {
+  throw new Error(`propertyMeta(Part.Material) = ${JSON.stringify(material)}`);
+}
+if (WasmEditor.propertyMeta("Part", "Transparency")?.type !== "Float32") throw new Error("propertyMeta type");
+if (WasmEditor.propertyMeta("Part", "Nope") !== undefined) throw new Error("propertyMeta for a missing key");
+if (!WasmEditor.enumByName("EasingStyle")?.some((i) => i.name === "Quad")) throw new Error("enumByName");
+if (!WasmEditor.isServiceClass("TweenService") || WasmEditor.isServiceClass("Part")) {
+  throw new Error("isServiceClass");
+}
+console.log("ok: play mode helpers");

@@ -2,16 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useEditor } from "@/stores/editor";
+import { afterEvent, playSession, setPlayViewport, usePlay } from "@/stores/play";
 import { assetIdOf, assetUrl } from "@/lib/asset-id";
 import { ScaleType, TextXAlignment, TextYAlignment } from "@/lib/gui/enums";
 import {
+  absoluteRects,
   layoutScreens,
   type Doc,
   type GuiElement,
   type ImageInfo,
   type TextInfo,
 } from "@/lib/gui/layout";
-import type { Props } from "@/lib/gui/props";
+import { color, num, rgba, type Props } from "@/lib/gui/props";
 import { parseRichText } from "@/lib/gui/text";
 import type { NodeInfo, PropertyInfo, Value } from "@/lib/types";
 
@@ -268,12 +270,80 @@ function ImageView({ image, w, h }: { image: ImageInfo; w: number; h: number }) 
   );
 }
 
+/** A TextBox you can type in while playing. */
+function TextBoxInput({ el, text, doc }: { el: GuiElement; text: TextInfo; doc: Doc }) {
+  const send = (event: string, args?: unknown[]) => {
+    playSession()?.gui(el.id, event, args);
+    afterEvent();
+  };
+  const setText = (value: string) => {
+    playSession()?.text(el.id, value);
+    afterEvent();
+  };
+  const props = doc.props(el.id);
+  const editable = props.TextEditable?.type !== "Bool" || props.TextEditable.value;
+  // Typed text uses TextColor3; the placeholder keeps PlaceholderColor3 (text.color then).
+  const typed = rgba(color(props, "TextColor3", [0, 0, 0]), num(props, "TextTransparency", 0));
+  return (
+    <input
+      className="absolute inset-0 bg-transparent outline-none placeholder:text-(--placeholder)"
+      style={{
+        ["--placeholder" as string]: text.color,
+        fontFamily: text.font.family,
+        fontWeight: text.font.weight,
+        fontStyle: text.font.italic ? "italic" : "normal",
+        fontSize: text.size,
+        color: text.placeholder ? typed : text.color,
+        textAlign: TEXT_ALIGN[text.xAlign] ?? "center",
+        paddingLeft: el.padding.l,
+        paddingRight: el.padding.r,
+      }}
+      value={text.placeholder ? "" : text.content}
+      placeholder={text.placeholder ? text.content : undefined}
+      readOnly={!editable}
+      autoCapitalize="off"
+      autoCorrect="off"
+      spellCheck={false}
+      onPointerDown={(e) => e.stopPropagation()}
+      onChange={(e) => setText(e.target.value)}
+      onFocus={() => {
+        // TextBox.ClearTextOnFocus (on by default).
+        const clear = props.ClearTextOnFocus?.type !== "Bool" || props.ClearTextOnFocus.value;
+        if (clear && editable) setText("");
+        send("Focused");
+      }}
+      onBlur={(e) => send("FocusLost", [e.currentTarget.dataset.enter === "1"])}
+      onKeyDown={(e) => {
+        if (e.key !== "Enter") return;
+        e.currentTarget.dataset.enter = "1";
+        e.currentTarget.blur();
+        e.currentTarget.dataset.enter = "";
+      }}
+    />
+  );
+}
+
+const BUTTONS = new Set(["TextButton", "ImageButton"]);
+
 type Ctx = {
   selected: Set<string>;
   drag: Drag | null;
   editable: boolean;
+  /** Play mode: taps are GUI events for scripts instead of selecting and dragging. */
+  playing: boolean;
+  doc: Doc;
   startDrag: (e: React.PointerEvent, el: GuiElement, kind: Drag["kind"]) => void;
 };
+
+/** The button a press started on, so releasing over it counts as a click. */
+let pressed: string | null = null;
+
+function playEvent(id: string, ...events: string[]) {
+  const session = playSession();
+  if (!session) return;
+  for (const event of events) session.gui(id, event);
+  afterEvent();
+}
 
 function Element({ el, ctx }: { el: GuiElement; ctx: Ctx }) {
   const selected = ctx.selected.has(el.id);
@@ -310,16 +380,34 @@ function Element({ el, ctx }: { el: GuiElement; ctx: Ctx }) {
   };
 
   const children = el.children.map((c) => <Element key={c.id} el={c} ctx={ctx} />);
+  const button = BUTTONS.has(el.className);
+  const handlers = ctx.playing
+    ? {
+        onPointerDown(e: React.PointerEvent) {
+          e.stopPropagation();
+          pressed = el.id;
+          playEvent(el.id, "InputBegan", ...(button ? ["MouseButton1Down"] : []));
+        },
+        onPointerUp(e: React.PointerEvent) {
+          e.stopPropagation();
+          const click = pressed === el.id;
+          pressed = null;
+          const events = ["InputEnded"];
+          if (button) events.push("MouseButton1Up", ...(click ? ["MouseButton1Click", "Activated"] : []));
+          playEvent(el.id, ...events);
+        },
+        onPointerEnter: () => playEvent(el.id, "MouseEnter"),
+        onPointerLeave: () => playEvent(el.id, "MouseLeave"),
+      }
+    : {
+        onPointerDown(e: React.PointerEvent) {
+          e.stopPropagation();
+          ctx.startDrag(e, el, "move");
+        },
+      };
+  const typing = ctx.playing && el.className === "TextBox" && el.text;
   return (
-    <div
-      className="absolute"
-      style={style}
-      data-gui-id={el.id}
-      onPointerDown={(e) => {
-        e.stopPropagation();
-        ctx.startDrag(e, el, "move");
-      }}
-    >
+    <div className="absolute" style={style} data-gui-id={el.id} {...handlers}>
       {el.image && <ImageView image={el.image} w={w} h={h} />}
       {el.scroll ? (
         <div
@@ -342,13 +430,17 @@ function Element({ el, ctx }: { el: GuiElement; ctx: Ctx }) {
       ) : (
         children
       )}
-      {el.text && <Text text={el.text} pad={el.padding} />}
+      {typing ? (
+        <TextBoxInput el={el} text={el.text!} doc={ctx.doc} />
+      ) : (
+        el.text && <Text text={el.text} pad={el.padding} />
+      )}
       {el.className === "ViewportFrame" && (
         <span className="pointer-events-none absolute left-1 top-1 text-[10px] text-white/50">
           ViewportFrame
         </span>
       )}
-      {selected && (
+      {selected && !ctx.playing && (
         <>
           <div
             className="pointer-events-none absolute -inset-px rounded-[inherit] border-2 border-blue-400"
@@ -384,6 +476,8 @@ export function GuiOverlay() {
   const rootId = useEditor((s) => s.rootId);
   const selection = useEditor((s) => s.selection);
   const readOnly = useEditor((s) => !!s.cloud?.readOnly);
+  const playing = useEditor((s) => s.playing);
+  const playerGui = usePlay((s) => s.playerGui);
   const [drag, setDrag] = useState<Drag | null>(null);
   // The latest drag, updated straight away (state lags a render behind).
   const dragRef = useRef<Drag | null>(null);
@@ -395,12 +489,66 @@ export function GuiOverlay() {
     return undefined;
   }, [doc, rootId]);
 
+  // While playing, the player's own copy of the GUIs (scripts change that one).
+  const container = playing && playerGui ? playerGui : starterGui;
+  const visible = show || playing;
   const screens = useMemo(
-    () => (show && size.w > 0 ? layoutScreens(doc, starterGui, size) : []),
+    () => (visible && size.w > 0 ? layoutScreens(doc, container, size) : []),
     // `fonts` re-measures text once web fonts arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [doc, starterGui, size, show, fonts],
+    [doc, container, size, visible, fonts],
   );
+
+  // Tell scripts where things ended up (AbsoluteSize/AbsolutePosition, ViewportSize).
+  useEffect(() => {
+    setPlayViewport(size.w, size.h);
+    const session = playSession();
+    if (!playing || !session) return;
+    session.rects = absoluteRects(screens);
+    session.viewport = [size.w, size.h];
+  }, [playing, screens, size]);
+
+  // Pointer input for UserInputService and the player's Mouse while playing.
+  useEffect(() => {
+    if (!playing) return;
+    const el = ref.current;
+    // Only pointers on the 3D view or the GUIs (not a script tab, panel or toolbar).
+    const local = (e: PointerEvent) => {
+      const view = el?.parentElement;
+      if (!el || !view || !(e.target instanceof Node) || !view.contains(e.target)) return null;
+      const r = el.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const kind = (e: PointerEvent) =>
+      e.pointerType === "touch" ? "Touch" : e.button === 2 ? "MouseButton2" : "MouseButton1";
+    const button = (state: "Begin" | "End") => (e: PointerEvent) => {
+      const p = local(e);
+      const session = playSession();
+      if (!p || !session) return;
+      // Over a GUI object, the game sees it as already handled (gameProcessedEvent).
+      const onGui = e.target instanceof HTMLElement && !!e.target.closest("[data-gui-id]");
+      session.mouse(p.x, p.y);
+      session.input(state, kind(e), undefined, onGui);
+      afterEvent();
+    };
+    const move = (e: PointerEvent) => {
+      const p = local(e);
+      const session = playSession();
+      if (!p || !session) return;
+      session.mouse(p.x, p.y);
+      afterEvent();
+    };
+    const down = button("Begin");
+    const up = button("End");
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointermove", move, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointermove", move, true);
+    };
+  }, [playing]);
   const selected = useMemo(() => new Set(selection), [selection]);
 
   // Drag to move/resize: preview locally, commit one property change on release.
@@ -444,6 +592,8 @@ export function GuiOverlay() {
     selected,
     drag,
     editable: !readOnly,
+    playing,
+    doc,
     startDrag(e, el, kind) {
       const st = useEditor.getState();
       const additive = e.shiftKey || e.metaKey || e.ctrlKey || st.multiSelect;

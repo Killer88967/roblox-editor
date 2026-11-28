@@ -25,6 +25,8 @@ function readSource(id: string) {
 /** Monaco editor for one script's Source, with Luau highlighting. */
 export function ScriptEditor({ id }: { id: string }) {
   const node = useEditor((s) => s.nodes.get(id));
+  // While playing, the script shows the play copy's source and can't be edited.
+  const playing = useEditor((s) => s.playing);
   const codeRef = useRef<CodeEditor | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   /** The last source we committed or loaded, to tell our edits from outside ones. */
@@ -65,11 +67,15 @@ export function ScriptEditor({ id }: { id: string }) {
     const flush = () => {
       if (document.visibilityState === "hidden") commitRef.current();
     };
+    // Play saves open scripts before it copies the place.
+    const flushNow = () => commitRef.current();
     document.addEventListener("visibilitychange", flush);
     window.addEventListener("pagehide", flush);
+    window.addEventListener("rbxe:flush-scripts", flushNow);
     return () => {
       document.removeEventListener("visibilitychange", flush);
       window.removeEventListener("pagehide", flush);
+      window.removeEventListener("rbxe:flush-scripts", flushNow);
     };
   }, []);
   // Undo the diagnostics/auto-end hookup when the editor goes away.
@@ -181,7 +187,7 @@ export function ScriptEditor({ id }: { id: string }) {
             smoothScrolling: true,
             cursorBlinking: "smooth",
             fixedOverflowWidgets: true,
-            readOnly: !!useEditor.getState().cloud?.readOnly,
+            readOnly: playing || !!useEditor.getState().cloud?.readOnly,
             quickSuggestions: { other: true, comments: false, strings: true },
             suggest: { preview: true, showStatusBar: true },
             suggestSelection: "first",

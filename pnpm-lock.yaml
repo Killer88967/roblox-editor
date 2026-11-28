@@ -256,6 +256,9 @@ importers:
       "@prisma/client":
         specifier: 7.10.1
         version: 7.10.1(prisma@7.10.1(@types/node@20.19.43)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@5.9.3))(typescript@5.9.3)
+      "@rbxe/luau":
+        specifier: workspace:*
+        version: link:../../packages/luau
       "@rbxe/wasm":
         specifier: workspace:*
         version: link:../../packages/wasm
@@ -335,6 +338,8 @@ importers:
       typescript:
         specifier: ^5
         version: 5.9.3
+
+  packages/luau: {}
 
   packages/wasm: {}
 

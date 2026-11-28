@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { isScriptClass, useEditor } from "@/stores/editor";
+import { usePlay } from "@/stores/play";
 import type { NodeInfo } from "@/lib/types";
 
 const ROW_HEIGHT = 28;
@@ -152,6 +153,8 @@ export function Explorer() {
   const nodes = useEditor((s) => s.nodes);
   const expanded = useEditor((s) => s.expanded);
   const primary = useEditor((s) => s.selection.at(-1));
+  // Play mode keeps parentless instances (Instance.new before Parent is set) out of sight.
+  const hidden = usePlay((s) => s.hiddenId);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -164,7 +167,7 @@ export function Explorer() {
     const out: Row[] = [];
     const root = rootId ? nodes.get(rootId) : undefined;
     if (!root) return out;
-    const shown = (id: string) => !search || search.visible.has(id);
+    const shown = (id: string) => id !== hidden && (!search || search.visible.has(id));
     const stack: Row[] = root.children
       .filter(shown)
       .map((id) => ({ id, depth: 0 }))
@@ -182,7 +185,7 @@ export function Explorer() {
       }
     }
     return out;
-  }, [rootId, nodes, expanded, search]);
+  }, [rootId, nodes, expanded, search, hidden]);
 
   const virtualizer = useVirtualizer({
     count: rows.length,
