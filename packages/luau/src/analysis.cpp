@@ -131,9 +131,9 @@ int an_check(const char *name, int nameLen, const char *source, int sourceLen)
   return count;
 }
 
-// wasi-libc's mmap emulation has no mprotect. Luau only uses it to write-protect frozen
-// type arenas (a debugging aid), so saying yes is enough.
-extern "C" int mprotect(void *, unsigned long, int)
+// Older wasi-libc mmap emulation has no mprotect (newer versions do, and theirs wins over
+// this weak one). Luau only uses it to write-protect frozen type arenas, so yes is enough.
+extern "C" __attribute__((weak)) int mprotect(void*, unsigned long, int)
 {
   return 0;
 }
