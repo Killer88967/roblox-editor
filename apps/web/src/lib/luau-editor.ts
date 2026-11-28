@@ -3,12 +3,15 @@ import { useEditor } from "@/stores/editor";
 import { analyze, type Problem } from "./luau-analyze";
 import { diagnose } from "./luau-diagnostics";
 import { treeFor, type Model } from "./luau-model";
+import { typecheck, type TypeProblem } from "./luau-typecheck";
 import { apiIfLoaded, loadApi } from "./roblox-api";
 
 type CodeEditor = Parameters<OnMount>[0];
 
 /** Diagnostics owner name for Monaco markers. */
 export const MARKER_OWNER = "luau";
+/** Markers from Luau's type checker (lib/luau-typecheck.ts). */
+export const TYPE_MARKER_OWNER = "luau-types";
 
 const DIAGNOSE_DELAY = 300;
 
@@ -21,6 +24,38 @@ const DIAGNOSE_DELAY = 300;
 export function attachLuauEditor(monaco: Monaco, code: CodeEditor) {
   const disposers: (() => void)[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let checks = 0;
+
+  /** Luau's type checker, in a worker; its results replace the last ones when they arrive. */
+  const runTypes = (model: Model) => {
+    const scriptId = model.uri.path.match(/script-([0-9a-f]+)\.luau$/)?.[1];
+    if (!scriptId) return;
+    const check = ++checks;
+    void typecheck(scriptId, model.getValue()).then((problems) => {
+      const current = code.getModel();
+      if (check !== checks || !current || (current as unknown as Model) !== model) return;
+      // Script Analysis already reports these (with quick fixes); don't show them twice.
+      const own = monaco.editor.getModelMarkers({ resource: current.uri, owner: MARKER_OWNER });
+      const covered = (p: TypeProblem) =>
+        p.message.startsWith("Unknown global") ||
+        own.some(
+          (m: { startLineNumber: number; startColumn: number; endColumn: number }) =>
+            m.startLineNumber === p.line && m.startColumn >= p.column && m.endColumn <= Math.max(p.endColumn, p.column + 1),
+        );
+      const markers = problems
+        .filter((p) => !covered(p))
+        .map((p) => ({
+          severity: monaco.MarkerSeverity.Error,
+          message: p.message,
+          startLineNumber: p.line,
+          startColumn: p.column,
+          endLineNumber: p.endLine,
+          endColumn: p.endLine === p.line ? Math.max(p.endColumn, p.column + 1) : p.endColumn,
+          source: "Luau type checker",
+        }));
+      monaco.editor.setModelMarkers(current, TYPE_MARKER_OWNER, markers);
+    });
+  };
 
   const run = () => {
     const model = code.getModel() as unknown as Model | null;
@@ -49,6 +84,7 @@ export function attachLuauEditor(monaco: Monaco, code: CodeEditor) {
       };
     });
     monaco.editor.setModelMarkers(code.getModel()!, MARKER_OWNER, markers);
+    runTypes(model);
   };
   const schedule = () => {
     clearTimeout(timer);
@@ -79,7 +115,10 @@ export function attachLuauEditor(monaco: Monaco, code: CodeEditor) {
     clearTimeout(timer);
     for (const d of disposers) d();
     const model = code.getModel();
-    if (model) monaco.editor.setModelMarkers(model, MARKER_OWNER, []);
+    if (model) {
+      monaco.editor.setModelMarkers(model, MARKER_OWNER, []);
+      monaco.editor.setModelMarkers(model, TYPE_MARKER_OWNER, []);
+    }
   };
 }
 

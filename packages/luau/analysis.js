@@ -1,5 +1,8 @@
 // Loads wasm/analysis.wasm (Luau's type checker, built by build.sh).
 
+/** Roblox's API as Luau definitions (types/roblox.d.luau, from scripts/gen-luau-types.mjs). */
+export const robloxDefinitionsUrl = new URL("./types/roblox.d.luau", import.meta.url);
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -61,18 +64,53 @@ export class LuauAnalyzer {
     return analyzer;
   }
 
-  /** Type checks a module. Returns [{ line, column, endLine, endColumn, message }]. */
+  /**
+   * Adds a definitions file (`declare class ...`) to the globals, e.g. Roblox's API. Call it
+   * before the first check. Returns the file's problems (empty when it loaded cleanly).
+   */
+  define(name, source) {
+    return this.call("an_define", name, source);
+  }
+
+  /**
+   * Replaces the place's instance tree: [{ id, parent, class, name }], the root first and
+   * parents before children. Module names are instance ids from then on.
+   */
+  setPlace(nodes) {
+    const clean = (s) => String(s ?? "").replace(/[\t\n\r]/g, " ");
+    const text = nodes.map((n) => [n.id, n.parent ?? "", n.class, n.name].map(clean).join("\t")).join("\n");
+    const { memory, an_alloc, an_free, an_set_place } = this.exports;
+    const bytes = encoder.encode(text);
+    const ptr = an_alloc(bytes.length);
+    new Uint8Array(memory.buffer, ptr, bytes.length).set(bytes);
+    const count = an_set_place(ptr, bytes.length);
+    an_free(ptr);
+    return count;
+  }
+
+  /** Sets a script's source (e.g. a ModuleScript others require) without checking it. */
+  setSource(name, source) {
+    this.call("an_set_source", name, source, false);
+  }
+
+  /** Type checks a module. Returns [{ line, column, endLine, endColumn, message }] in order. */
   check(name, source) {
-    const { memory, an_alloc, an_free, an_check, an_result, an_result_len } = this.exports;
+    return this.call("an_check", name, source).sort((a, b) => a.line - b.line || a.column - b.column);
+  }
+
+  /** Calls an export that takes (name, source); reads the JSON it leaves in an_result. */
+  call(fn, name, source, read = true) {
+    const { memory, an_alloc, an_free, an_result, an_result_len } = this.exports;
     const nameBytes = encoder.encode(name);
     const sourceBytes = encoder.encode(source);
     const namePtr = an_alloc(nameBytes.length);
     const sourcePtr = an_alloc(sourceBytes.length);
     new Uint8Array(memory.buffer, namePtr, nameBytes.length).set(nameBytes);
     new Uint8Array(memory.buffer, sourcePtr, sourceBytes.length).set(sourceBytes);
-    an_check(namePtr, nameBytes.length, sourcePtr, sourceBytes.length);
+    this.exports[fn](namePtr, nameBytes.length, sourcePtr, sourceBytes.length);
     an_free(namePtr);
     an_free(sourcePtr);
+    if (!read) return [];
     const json = decoder.decode(new Uint8Array(memory.buffer, an_result(), an_result_len()));
     return JSON.parse(json);
   }

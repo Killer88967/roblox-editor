@@ -83,6 +83,10 @@ jobs:
       - name: WASM smoke test
         run: node packages/wasm/smoke-test.mjs
 
+      # The Luau types file is generated: fail if it's out of date with the API data.
+      - name: Check Luau types
+        run: node scripts/gen-luau-types.mjs && git diff --exit-code packages/luau/types
+
       # Luau (VM + compiler) and the play-mode runtime, for the browser.
       - name: Build Luau WASM
         run: pnpm --filter @rbxe/luau build:wasm
