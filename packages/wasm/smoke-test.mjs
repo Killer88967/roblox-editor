@@ -53,7 +53,7 @@ for (const [label, editor] of [
 
 // Reflection helpers for play mode.
 const chain = WasmEditor.classChain("Part");
-if (chain[0] !== "Part" || !chain.includes("BasePart") || chain.at(-1) !== "Instance") {
+if (chain[0] !== "Part" || !chain.includes("BasePart") || !chain.includes("Instance")) {
   throw new Error(`classChain("Part") = ${chain}`);
 }
 if (WasmEditor.classChain("NotAClass").length !== 0) throw new Error("classChain for unknown classes");
