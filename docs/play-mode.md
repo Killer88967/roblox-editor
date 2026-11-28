@@ -21,12 +21,12 @@ One player (`Players.Player1`) joins after server scripts start. Server and clie
 one Luau VM, each with its own context (`RunService:IsServer()` / `IsClient()`), and separate
 `require` caches.
 
-| Script                    | Runs in                                                        |
-| ------------------------- | -------------------------------------------------------------- |
-| Script (RunContext Legacy) | Workspace, ServerScriptService                                |
-| Script (Server / Client)  | anywhere except StarterGui, StarterPack, StarterPlayer, ServerStorage |
-| LocalScript               | PlayerGui, Backpack, PlayerScripts, ReplicatedFirst            |
-| ModuleScript              | when required                                                  |
+| Script                     | Runs in                                                               |
+| -------------------------- | --------------------------------------------------------------------- |
+| Script (RunContext Legacy) | Workspace, ServerScriptService                                        |
+| Script (Server / Client)   | anywhere except StarterGui, StarterPack, StarterPlayer, ServerStorage |
+| LocalScript                | PlayerGui, Backpack, PlayerScripts, ReplicatedFirst                   |
+| ModuleScript               | when required                                                         |
 
 Scripts also start when they're parented somewhere they run (e.g. a cloned tool or GUI).
 A script that runs for 5 seconds without yielding is stopped with Roblox's timeout error.

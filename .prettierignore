@@ -1,4 +1,5 @@
 packages/wasm/**
+packages/luau/**
 apps/web/src/data/*.json
 apps/web/src/generated/**
 apps/web/prisma/migrations/**

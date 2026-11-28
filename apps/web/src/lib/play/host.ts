@@ -44,7 +44,12 @@ export type HostOptions = {
   /** The view's size in pixels (Camera.ViewportSize). */
   viewport?: () => [number, number];
   /** Text size in pixels for TextService:GetTextSize. */
-  textSize?: (text: string, size: number, font: string, frame?: [number, number]) => [number, number];
+  textSize?: (
+    text: string,
+    size: number,
+    font: string,
+    frame?: [number, number],
+  ) => [number, number];
 };
 
 type Wire = null | boolean | number | string | Wire[] | { [key: string]: Wire };
@@ -87,7 +92,13 @@ export class PlayHost {
     this.options = options;
     this.nilId = statics.newId();
     this.apply([
-      { type: "create", parent: editor.rootId(), class: "Folder", name: "NilInstances", id: this.nilId },
+      {
+        type: "create",
+        parent: editor.rootId(),
+        class: "Folder",
+        name: "NilInstances",
+        id: this.nilId,
+      },
     ]);
   }
 
@@ -126,7 +137,13 @@ export class PlayHost {
       },
       { type: "create", parent: player, class: "PlayerGui", name: "PlayerGui", id: playerGui },
       { type: "create", parent: player, class: "Backpack", name: "Backpack", id: backpack },
-      { type: "create", parent: player, class: "PlayerScripts", name: "PlayerScripts", id: playerScripts },
+      {
+        type: "create",
+        parent: player,
+        class: "PlayerScripts",
+        name: "PlayerScripts",
+        id: playerScripts,
+      },
     ]);
 
     const childOf = (parent: string | undefined, className: string) =>
@@ -154,7 +171,13 @@ export class PlayHost {
         const camera = childOf(workspace, "Camera") ?? this.statics.newId();
         const ops: unknown[] = [];
         if (!this.node(camera)) {
-          ops.push({ type: "create", parent: workspace, class: "Camera", name: "Camera", id: camera });
+          ops.push({
+            type: "create",
+            parent: workspace,
+            class: "Camera",
+            name: "Camera",
+            id: camera,
+          });
         }
         ops.push({
           type: "setProperty",
@@ -195,7 +218,9 @@ export class PlayHost {
   private children(id: string): string[] {
     const node = this.node(id);
     if (!node) return [];
-    return id === this.editor.rootId() ? node.children.filter((c) => c !== this.nilId) : node.children;
+    return id === this.editor.rootId()
+      ? node.children.filter((c) => c !== this.nilId)
+      : node.children;
   }
 
   /** Depth-first, in child order. */
@@ -292,7 +317,12 @@ export class PlayHost {
   }
 
   /** Converts a wire value for a property of the given type, or throws Roblox's message. */
-  private coerce(w: unknown, key: string, type: string, enumName: string | null | undefined): Value {
+  private coerce(
+    w: unknown,
+    key: string,
+    type: string,
+    enumName: string | null | undefined,
+  ): Value {
     const got = this.wireType(w);
     const fail = (expected: string): never => {
       throw new HostError(`Unable to assign property ${key}. ${expected} expected, got ${got}`);
@@ -335,7 +365,14 @@ export class PlayHost {
       case "Color3uint8": {
         if (got === "Color3") {
           const c = o.v as number[];
-          return { type, value: c.map((n) => Math.round(Math.min(Math.max(n, 0), 1) * 255)) as [number, number, number] };
+          return {
+            type,
+            value: c.map((n) => Math.round(Math.min(Math.max(n, 0), 1) * 255)) as [
+              number,
+              number,
+              number,
+            ],
+          };
         }
         if (got === "BrickColor") {
           const c = (o.v as { color: number[] }).color;
@@ -417,7 +454,8 @@ export class PlayHost {
         return this.tagged(id);
       case "alltags": {
         const all = new Set<string>();
-        for (const d of this.descendants(this.editor.rootId())) for (const t of this.editor.tags(d)) all.add(t);
+        for (const d of this.descendants(this.editor.rootId()))
+          for (const t of this.editor.tags(d)) all.add(t);
         return [...all];
       }
       case "out":
@@ -587,7 +625,11 @@ export class PlayHost {
       const enabled = this.editor.property(id, "Enabled") as Value | undefined;
       const disabled = this.editor.property(id, "Disabled") as Value | undefined;
       const on =
-        enabled?.type === "Bool" ? enabled.value : disabled?.type === "Bool" ? !disabled.value : true;
+        enabled?.type === "Bool"
+          ? enabled.value
+          : disabled?.type === "Bool"
+            ? !disabled.value
+            : true;
       out.push({
         s: this.wire(id),
         enabled: on,

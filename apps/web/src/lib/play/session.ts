@@ -1,5 +1,12 @@
 import { LuauVM } from "@rbxe/luau";
-import { PlayHost, type HostOptions, type OutputKind, type PlayEditor, type PlayStatics, type Rect } from "./host";
+import {
+  PlayHost,
+  type HostOptions,
+  type OutputKind,
+  type PlayEditor,
+  type PlayStatics,
+  type Rect,
+} from "./host";
 
 /** A running play test: the Luau VM, and the host answering it against the play copy. */
 export class PlaySession {

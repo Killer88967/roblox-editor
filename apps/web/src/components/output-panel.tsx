@@ -57,11 +57,16 @@ export function OutputPanel() {
       >
         {output.length === 0 && (
           <div className="py-2 text-zinc-500">
-            {running ? "Nothing printed yet." : "Press Play to run your scripts. Their output shows here."}
+            {running
+              ? "Nothing printed yet."
+              : "Press Play to run your scripts. Their output shows here."}
           </div>
         )}
         {output.map((line) => (
-          <div key={line.id} className={`flex gap-2 whitespace-pre-wrap break-words ${COLORS[line.kind]}`}>
+          <div
+            key={line.id}
+            className={`flex gap-2 whitespace-pre-wrap break-words ${COLORS[line.kind]}`}
+          >
             <span className="shrink-0 text-zinc-600">{line.time}</span>
             <span className="min-w-0">{line.text}</span>
           </div>
@@ -81,7 +86,11 @@ export function OutputPanel() {
         <span className="px-2 py-1.5 font-mono text-zinc-500">&gt;</span>
         <input
           className="min-w-0 flex-1 bg-transparent py-1.5 pr-2 font-mono text-zinc-100 outline-none placeholder:text-zinc-600"
-          placeholder={running ? "Run a command, e.g. print(workspace:GetChildren())" : "Command bar (while playing)"}
+          placeholder={
+            running
+              ? "Run a command, e.g. print(workspace:GetChildren())"
+              : "Command bar (while playing)"
+          }
           value={command}
           autoCapitalize="off"
           autoCorrect="off"

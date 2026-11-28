@@ -393,7 +393,8 @@ function Element({ el, ctx }: { el: GuiElement; ctx: Ctx }) {
           const click = pressed === el.id;
           pressed = null;
           const events = ["InputEnded"];
-          if (button) events.push("MouseButton1Up", ...(click ? ["MouseButton1Click", "Activated"] : []));
+          if (button)
+            events.push("MouseButton1Up", ...(click ? ["MouseButton1Click", "Activated"] : []));
           playEvent(el.id, ...events);
         },
         onPointerEnter: () => playEvent(el.id, "MouseEnter"),

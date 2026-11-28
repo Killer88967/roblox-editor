@@ -19,7 +19,10 @@ const { WasmEditor } = wasm;
 
 const place = WasmEditor.empty();
 const top = Object.fromEntries(
-  place.nodes().filter((n) => n.parent === place.rootId()).map((n) => [n.class, n.id]),
+  place
+    .nodes()
+    .filter((n) => n.parent === place.rootId())
+    .map((n) => [n.class, n.id]),
 );
 const str = (value) => ({ type: "String", value });
 const created = new Map();
@@ -29,7 +32,8 @@ function add(parent, className, name, properties = {}) {
   created.set(name, id);
   return id;
 }
-const script = (parent, className, name, source) => add(parent, className, name, { Source: str(source) });
+const script = (parent, className, name, source) =>
+  add(parent, className, name, { Source: str(source) });
 
 const rs = top.ReplicatedStorage;
 script(rs, "ModuleScript", "Config", `return { Theme = { Raised = true }, Speed = 16 }`);
@@ -37,7 +41,11 @@ script(rs, "ModuleScript", "Broken", `error("module exploded")`);
 add(rs, "RemoteEvent", "ButtonEvent");
 add(rs, "RemoteFunction", "GetCoins");
 
-script(top.ServerScriptService, "Script", "Main", `
+script(
+  top.ServerScriptService,
+  "Script",
+  "Main",
+  `
 local RS = game:GetService("ReplicatedStorage")
 local Config = require(RS.Config)
 print("speed", Config.Speed, Config.Theme.Raised)
@@ -102,14 +110,19 @@ end)
 local t = os.clock()
 task.wait(0.25)
 print("waited", time() >= 0.25)
-`);
+`,
+);
 
 const menu = add(top.StarterGui, "ScreenGui", "Menu");
 const panel = add(menu, "Frame", "Panel", {
   Position: { type: "UDim2", value: { x: { scale: 0, offset: 0 }, y: { scale: 0, offset: 0 } } },
 });
 add(panel, "TextButton", "Buy", { Text: str("Buy") });
-script(menu, "LocalScript", "MenuScript", `
+script(
+  menu,
+  "LocalScript",
+  "MenuScript",
+  `
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
 local button = script.Parent.Panel.Buy
@@ -123,19 +136,29 @@ RS.ButtonEvent.OnClientEvent:Connect(function(msg)
 	print("client got", msg)
 end)
 script.Parent.Panel:TweenPosition(UDim2.new(0.5, 0, 0.5, 0), "Out", "Quad", 0.3, true)
-`);
+`,
+);
 
 const starterPlayerScripts = add(top.StarterPlayer, "StarterPlayerScripts", "StarterPlayerScripts");
-script(starterPlayerScripts, "LocalScript", "Input", `
+script(
+  starterPlayerScripts,
+  "LocalScript",
+  "Input",
+  `
 local UIS = game:GetService("UserInputService")
 local gui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui"):WaitForChild("Menu")
 print("found", gui.Name, gui.Panel.Buy.Text)
 UIS.InputBegan:Connect(function(input, processed)
 	print("key", input.KeyCode.Name, processed)
 end)
-`);
+`,
+);
 
-script(top.ServerScriptService, "Script", "Extras", `
+script(
+  top.ServerScriptService,
+  "Script",
+  "Extras",
+  `
 print("types", typeof(workspace), typeof(Vector3.new()), typeof(CFrame.new()), typeof(Enum.Material.Neon), typeof(game.Changed), typeof(UDim2.new()))
 local cf = CFrame.new(1, 2, 3) * CFrame.Angles(0, math.rad(90), 0)
 local p = cf * Vector3.new(1, 0, 0)
@@ -182,7 +205,8 @@ print("enum missing", pcall(function() return Enum.NotAThing end))
 print("member missing", select(2, pcall(function() return workspace.NotAChild end)))
 print("bad class", select(2, pcall(Instance.new, "NotAClass")))
 print("timeout child", workspace:WaitForChild("Nope", 0.1))
-`);
+`,
+);
 script(top.Workspace, "Script", "Spin", `while true do end`);
 script(top.Workspace, "Script", "Syntax", `local x = = 1`);
 script(top.ServerStorage ?? rs, "Script", "Template", `print("templates don't run")`);
@@ -213,7 +237,10 @@ send({ op: "gui", id: buy, event: "MouseButton1Click" });
 for (let i = 0; i < 30; i++) send({ op: "step", dt: 1 / 60 });
 send({ op: "input", state: "Begin", type: "Keyboard", key: "W" });
 
-const has = (pattern) => output.some((line) => (typeof pattern === "string" ? line.includes(pattern) : pattern.test(line)));
+const has = (pattern) =>
+  output.some((line) =>
+    typeof pattern === "string" ? line.includes(pattern) : pattern.test(line),
+  );
 const expectations = [
   "print: speed 16 true",
   "print: part Workspace.Spawned 0, 10, 0 50 Enum.Material.Neon",
@@ -262,7 +289,9 @@ assert.ok(!has("never"), "task.cancel stops a delayed thread");
 assert.ok(!output.some((l) => l.startsWith("stdout:")), "nothing printed outside the runtime");
 
 const prop = (id, key) => editor.property(id, key);
-const workspace = host.node(editor.rootId()).children.find((c) => host.node(c).class === "Workspace");
+const workspace = host
+  .node(editor.rootId())
+  .children.find((c) => host.node(c).class === "Workspace");
 const spawned = byName(workspace, "Spawned");
 assert.deepEqual(prop(spawned, "Color").value, [255, 0, 0]);
 assert.equal(prop(spawned, "Material").value, 288);
@@ -275,6 +304,9 @@ assert.deepEqual(prop(byName(playerGui, "Panel"), "Position").value, {
 });
 assert.equal(host.node(byName(workspace, "Stuff")).children.length, 0);
 // The edit copy is untouched.
-assert.equal(place.nodes().some((n) => n.name === "Spawned"), false);
+assert.equal(
+  place.nodes().some((n) => n.name === "Spawned"),
+  false,
+);
 
 console.log(`play mode: ${expectations.length} checks passed`);
