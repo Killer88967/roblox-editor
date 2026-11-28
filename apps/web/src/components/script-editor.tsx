@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { quickSave, useEditor } from "@/stores/editor";
 import { registerLuau } from "@/lib/luau";
 import { registerCompletions } from "@/lib/luau-complete";
-import { attachLuauEditor, MARKER_OWNER } from "@/lib/luau-editor";
+import { attachLuauEditor, MARKER_OWNER, TYPE_MARKER_OWNER } from "@/lib/luau-editor";
 import { registerProviders } from "@/lib/luau-providers";
 import { THEME } from "@/lib/luau-theme";
 import type { PropertyInfo } from "@/lib/types";
@@ -117,7 +117,9 @@ export function ScriptEditor({ id }: { id: string }) {
     const countProblems = () => {
       const model = code.getModel();
       if (!model) return;
-      const markers = monaco.editor.getModelMarkers({ resource: model.uri, owner: MARKER_OWNER });
+      const markers = [MARKER_OWNER, TYPE_MARKER_OWNER].flatMap((owner) =>
+        monaco.editor.getModelMarkers({ resource: model.uri, owner }),
+      );
       const S = monaco.MarkerSeverity;
       setStatus((s) => ({
         ...s,
