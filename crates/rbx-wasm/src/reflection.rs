@@ -108,6 +108,39 @@ pub fn default_properties(class: &str) -> HashMap<String, Variant> {
     out
 }
 
+/// The class and its base classes, most specific first.
+pub fn class_chain(class: &str) -> Vec<String> {
+    let db = db();
+    match db.classes.get(class) {
+        Some(desc) => db
+            .superclasses_iter(desc)
+            .map(|c| c.name.to_owned())
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+/// Every item of an enum by name, sorted by value.
+pub fn enum_items_by_name(name: &str) -> Option<Vec<EnumItem>> {
+    let desc = db().enums.get(name)?;
+    let mut items: Vec<EnumItem> = desc
+        .items
+        .iter()
+        .map(|(name, value)| EnumItem {
+            name,
+            value: *value,
+        })
+        .collect();
+    items.sort_by_key(|i| i.value);
+    Some(items)
+}
+
+pub fn is_service(class: &str) -> bool {
+    db().classes
+        .get(class)
+        .is_some_and(|c| c.tags.contains(&ClassTag::Service))
+}
+
 /// Classes that can be created with Insert Object, sorted by name.
 pub fn insertable_classes() -> Vec<&'static str> {
     let mut names: Vec<&'static str> = db()
@@ -149,6 +182,11 @@ mod tests {
             Some(Variant::Bool(false))
         ));
         assert!(default_properties("Part").contains_key("Size"));
+        assert_eq!(class_chain("Part")[..2], ["Part", "FormFactorPart"]);
+        assert!(
+            enum_items_by_name("EasingStyle").is_some_and(|i| i.iter().any(|i| i.name == "Quad"))
+        );
+        assert!(is_service("TweenService") && !is_service("Part"));
         assert!(
             enum_items("Part", "Material")
                 .iter()

@@ -5,6 +5,7 @@ import { Bounds, Edges, OrbitControls, TransformControls } from "@react-three/dr
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { useEditor } from "@/stores/editor";
+import { afterEvent, playSession } from "@/stores/play";
 import { viewportApi } from "@/lib/viewport-api";
 import { materialLook } from "@/lib/materials";
 import { useAssetTexture } from "@/lib/asset-textures";
@@ -143,6 +144,17 @@ type OrbitLike = { target: THREE.Vector3; update: () => void; enabled: boolean }
  * Which instance a click on a part should select: like Studio, the outermost Model
  * the part is in (below Workspace), unless Alt/Option is held.
  */
+/** A ClickDetector in the part or one of its models (what a click in play mode triggers). */
+function clickDetectorFor(partId: string, nodes: Map<string, NodeInfo>) {
+  for (let id: string | undefined = partId; id; id = nodes.get(id)?.parent) {
+    const node = nodes.get(id);
+    if (!node || node.class === "Workspace") break;
+    const detector = node.children.find((c) => nodes.get(c)?.class === "ClickDetector");
+    if (detector) return detector;
+  }
+  return undefined;
+}
+
 function clickTarget(partId: string, nodes: Map<string, NodeInfo>, direct: boolean) {
   if (direct) return partId;
   let target = partId;
@@ -295,7 +307,13 @@ const PartMesh = memo(function PartMesh({
   const onClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     if (e.delta > DRAG_THRESHOLD) return;
-    const { nodes, select, multiSelect } = useEditor.getState();
+    const { nodes, select, multiSelect, playing } = useEditor.getState();
+    const detector = playing ? clickDetectorFor(part.id, nodes) : undefined;
+    if (detector) {
+      playSession()?.click(detector);
+      afterEvent();
+      return;
+    }
     const ev = e.nativeEvent;
     const id = clickTarget(part.id, nodes, ev.altKey);
     select(

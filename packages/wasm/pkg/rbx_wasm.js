@@ -32,6 +32,20 @@ export class WasmEditor {
         return v1;
     }
     /**
+     * An instance's attributes as `{ name: Value }` (types the editor can't show are skipped).
+     * @param {string} id
+     * @returns {any}
+     */
+    attributes(id) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_attributes(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
      * @returns {boolean}
      */
     canRedo() {
@@ -44,6 +58,22 @@ export class WasmEditor {
     canUndo() {
         const ret = wasm.wasmeditor_canUndo(this.__wbg_ptr);
         return ret !== 0;
+    }
+    /**
+     * The class and its base classes, most specific first ([] for unknown classes).
+     * @param {string} _class
+     * @returns {string[]}
+     */
+    static classChain(_class) {
+        const ptr0 = passStringToWasm0(_class, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_classChain(ptr0, len0);
+        var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]);
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
+        return v2;
+    }
+    clearHistory() {
+        wasm.wasmeditor_clearHistory(this.__wbg_ptr);
     }
     /**
      * One instance (and its descendants) as a binary model, for the clipboard.
@@ -68,6 +98,20 @@ export class WasmEditor {
     static empty() {
         const ret = wasm.wasmeditor_empty();
         return WasmEditor.__wrap(ret);
+    }
+    /**
+     * Items of an enum by its name, e.g. "EasingStyle" (undefined for unknown enums).
+     * @param {string} name
+     * @returns {any}
+     */
+    static enumByName(name) {
+        const ptr0 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_enumByName(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
     }
     /**
      * Items for an enum property's dropdown: [{ name, value }].
@@ -120,6 +164,14 @@ export class WasmEditor {
         return v3;
     }
     /**
+     * A copy of the place with the same instance ids and no undo history.
+     * @returns {WasmEditor}
+     */
+    fork() {
+        const ret = wasm.wasmeditor_fork(this.__wbg_ptr);
+        return WasmEditor.__wrap(ret);
+    }
+    /**
      * Builds a place from Rojo project files: `{ "default.project.json": bytes, "src/...": bytes }`.
      * Anything skipped is reported by `takeWarnings()`.
      * @param {any} files
@@ -161,6 +213,17 @@ export class WasmEditor {
             throw e;
         }
         const ret = wasm.wasmeditor_isA(ptr0, len0, ptr1, len1);
+        return ret !== 0;
+    }
+    /**
+     * Whether a class is a service (e.g. "TweenService"), for game:GetService.
+     * @param {string} _class
+     * @returns {boolean}
+     */
+    static isServiceClass(_class) {
+        const ptr0 = passStringToWasm0(_class, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_isServiceClass(ptr0, len0);
         return ret !== 0;
     }
     /**
@@ -236,6 +299,54 @@ export class WasmEditor {
         const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.wasmeditor_properties(this.__wbg_ptr, ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * `{ enum, type, default }` for a property (searching base classes), or undefined.
+     * @param {string} _class
+     * @param {string} key
+     * @returns {any}
+     */
+    static propertyMeta(_class, key) {
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passStringToWasm0(_class, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.wasmeditor_propertyMeta(ptr0, len0, ptr1, len1);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return takeFromExternrefTable0(ret[0]);
+    }
+    /**
+     * One property's value, or undefined if the instance doesn't have it.
+     * @param {string} id
+     * @param {string} key
+     * @returns {any}
+     */
+    property(id, key) {
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passStringToWasm0(key, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_free(ptr1, len1 * 1, 1); }
+            if (ptr0) { wasm.__wbindgen_free(ptr0, len0 * 1, 1); }
+            throw e;
+        }
+        const ret = wasm.wasmeditor_property(this.__wbg_ptr, ptr0, len0, ptr1, len1);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -319,6 +430,22 @@ export class WasmEditor {
         }
         var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
         wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v2;
+    }
+    /**
+     * An instance's CollectionService tags.
+     * @param {string} id
+     * @returns {string[]}
+     */
+    tags(id) {
+        const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.wasmeditor_tags(this.__wbg_ptr, ptr0, len0);
+        if (ret[3]) {
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        var v2 = getArrayJsValueFromWasm0(ret[0], ret[1]);
+        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
         return v2;
     }
     /**

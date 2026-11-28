@@ -1,7 +1,7 @@
 "use client";
 
 import { Environment, Lightformer } from "@react-three/drei";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import * as THREE from "three";
 import { useEditor } from "@/stores/editor";
 import type { LightingInfo } from "@/lib/types";
@@ -24,7 +24,9 @@ function sunDirection(clockTime: number, latitude: number) {
  * Lights, sky and fog that follow the place's Lighting service: time of day, Brightness,
  * Ambient/OutdoorAmbient, fog, and Atmosphere haze. An approximation, not Studio's renderer.
  */
-export function SceneLighting() {
+// Memoized: the viewport re-renders whenever parts change (every frame in play mode), and a
+// re-render makes <Environment> capture its reflections again, which is slow.
+export const SceneLighting = memo(function SceneLighting() {
   const lighting = useEditor((s) => s.lighting);
   const look = useMemo(() => describe(lighting), [lighting]);
 
@@ -57,7 +59,7 @@ export function SceneLighting() {
       )}
     </>
   );
-}
+});
 
 const SKY_VERTEX = /* glsl */ `
   varying vec3 vDir;

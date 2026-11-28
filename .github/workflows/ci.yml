@@ -39,9 +39,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # zstd-sys (used by rbx_binary) compiles C code, which needs clang for wasm32.
+      # zstd-sys (used by rbx_binary) compiles C code, which needs clang for wasm32. The Luau
+      # build (packages/luau) also needs lld and the wasm32 libc/libc++.
       - name: Install clang
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends clang llvm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang llvm clang-18 lld-18 wasi-libc \
+            libc++-18-dev-wasm32 libc++abi-18-dev-wasm32 libclang-rt-18-dev-wasm32
 
       - uses: taiki-e/install-action@v2
         with:
@@ -79,6 +83,14 @@ jobs:
       - name: WASM smoke test
         run: node packages/wasm/smoke-test.mjs
 
+      # Luau (VM + compiler) and the play-mode runtime, for the browser.
+      - name: Build Luau WASM
+        run: pnpm --filter @rbxe/luau build:wasm
+
+      # Scripts run end to end: the Luau runtime, the web app's host, and the WASM editor.
+      - name: Play mode test
+        run: node packages/luau/test.mjs
+
       # `next typegen` generates route types (e.g. LayoutProps) that tsc needs.
       - name: Typecheck web app
         run: pnpm --filter web exec next typegen && pnpm --filter web exec tsc --noEmit
@@ -89,15 +101,15 @@ jobs:
       - name: Build web app
         run: pnpm --filter web build
 
-      # The built WASM package is committed (the web deploy uses it as-is), so keep it
-      # in sync with the Rust code on PR branches from this repo.
+      # The built WASM packages are committed (the web deploy uses them as-is), so keep
+      # them in sync with the Rust and Luau code on PR branches from this repo.
       - name: Commit rebuilt WASM package
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
         run: |
-          if [ -n "$(git status --porcelain packages/wasm/pkg)" ]; then
+          if [ -n "$(git status --porcelain packages/wasm/pkg packages/luau/wasm)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-            git add packages/wasm/pkg
+            git add packages/wasm/pkg packages/luau/wasm
             git commit -m "chore: rebuild WASM package"
             git push
           else

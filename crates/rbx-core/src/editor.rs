@@ -70,6 +70,12 @@ impl Editor {
         self.dirty.drain().collect()
     }
 
+    /// Forgets undo/redo history (play mode makes many throwaway edits).
+    pub fn clear_history(&mut self) {
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+    }
+
     pub fn can_undo(&self) -> bool {
         !self.undo_stack.is_empty()
     }
