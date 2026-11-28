@@ -101,7 +101,13 @@ for src in "$luau"/Common/src/*.cpp "$luau"/Ast/src/*.cpp "$luau"/Bytecode/src/*
   compile "$src" "$CLANGXX" "${luau_flags[@]}"
 done
 compile "$here/src/bridge.cpp" "$CLANGXX" "${luau_flags[@]}"
-compile "$build/runtime.cpp" "$CLANGXX" -std=c++17
+# The type checker. src/shim has single-threaded <mutex> and <condition_variable>: this
+# libc++ is built without threads.
+analysis_flags=("${luau_flags[@]}" -D_WASI_EMULATED_MMAN -I"$here/src/shim"
+  -I"$luau/Config/include" -I"$luau/Analysis/include")
+for src in "$luau"/Config/src/*.cpp "$luau"/Analysis/src/*.cpp "$here/src/analysis.cpp"; do
+  compile "$src" "$CLANGXX" "${analysis_flags[@]}"
+done
 
 abi_flags=(-std=c++20 -D_LIBCXXABI_BUILDING_LIBRARY -D_LIBCPP_BUILDING_LIBRARY
   -D_LIBCXXABI_HAS_NO_THREADS -DLIBCXXABI_SILENT_TERMINATE -D_LIBCPP_HAS_NO_THREADS
@@ -119,10 +125,27 @@ if [ "$failed" = 1 ]; then
   exit 1
 fi
 
-mkdir -p "$here/wasm"
-"$CLANGXX" --target=wasm32-wasi "--sysroot=$sysroot" -fwasm-exceptions -mexec-model=reactor \
-  -nostdlib++ -O2 -Wl,--gc-sections -Wl,--strip-all \
-  "${objects[@]}" "$sysroot/lib/wasm32-wasi/libc++.a" -lwasi-emulated-process-clocks \
-  -o "$here/wasm/luau.wasm"
+# luau.wasm: the VM and play runtime. analysis.wasm: the type checker. Both share the rest.
+play=()
+analysis=()
+for obj in "${objects[@]}"; do
+  case "$obj" in
+    *_Analysis_src_* | *_Config_src_* | *src_analysis.cpp.o) analysis+=("$obj") ;;
+    *src_bridge.cpp.o | */runtime.cpp.o) play+=("$obj") ;;
+    *) play+=("$obj") analysis+=("$obj") ;;
+  esac
+done
 
-echo "built $(du -h "$here/wasm/luau.wasm" | cut -f1) wasm/luau.wasm (Luau $LUAU_VERSION)"
+link() { # link <output> <objects...>
+  local out=$1
+  shift
+  "$CLANGXX" --target=wasm32-wasi "--sysroot=$sysroot" -fwasm-exceptions -mexec-model=reactor \
+    -nostdlib++ -O2 -Wl,--gc-sections -Wl,--strip-all \
+    "$@" "$sysroot/lib/wasm32-wasi/libc++.a" -lwasi-emulated-process-clocks \
+    -lwasi-emulated-mman -o "$here/wasm/$out"
+  echo "built $(du -h "$here/wasm/$out" | cut -f1) wasm/$out (Luau $LUAU_VERSION)"
+}
+
+mkdir -p "$here/wasm"
+link luau.wasm "${play[@]}"
+link analysis.wasm "${analysis[@]}"

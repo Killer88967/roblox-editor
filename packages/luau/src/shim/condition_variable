@@ -1,0 +1,20 @@
+#pragma once
+// Single-threaded stand-in for <condition_variable>: nothing else can change the state, so
+// waiting returns at once.
+#include <mutex>
+namespace std
+{
+  struct condition_variable
+  {
+    void notify_one() {}
+    void notify_all() {}
+    template <class L>
+    void wait(L &)
+    {
+    }
+    template <class L, class P>
+    void wait(L &, P)
+    {
+    }
+  };
+} // namespace std
