@@ -1,0 +1,7 @@
+{
+  "CPP Include": {
+    "prefix": "include",
+    "scope": "cpp",
+    "body": "#include $1",
+  },
+}

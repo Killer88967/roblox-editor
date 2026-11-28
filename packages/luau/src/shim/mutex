@@ -1,0 +1,40 @@
+#pragma once
+// Single-threaded stand-ins for <mutex>: this WebAssembly build has no threads.
+namespace std
+{
+  struct mutex
+  {
+    void lock() {}
+    void unlock() {}
+    bool try_lock() { return true; }
+  };
+  struct recursive_mutex : mutex
+  {
+  };
+  template <class M>
+  struct lock_guard
+  {
+    explicit lock_guard(M &) {}
+  };
+  template <class M>
+  struct unique_lock
+  {
+    unique_lock() = default;
+    explicit unique_lock(M &m)
+        : m_(&m)
+    {
+    }
+    void lock() {}
+    void unlock() {}
+    bool owns_lock() const { return true; }
+    M *mutex() const { return m_; }
+
+  private:
+    M *m_ = nullptr;
+  };
+  template <class... M>
+  struct scoped_lock
+  {
+    explicit scoped_lock(M &...) {}
+  };
+} // namespace std
